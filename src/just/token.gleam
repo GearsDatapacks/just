@@ -4,6 +4,7 @@ pub type Token {
   MultiLineComment(String)
   HashBangComment(String)
   Whitespace(String)
+  LineTerminator(String)
 
   // Literals
   Identifier(String)
@@ -171,6 +172,7 @@ pub fn to_source(token: Token) -> String {
     MultiLineComment(value) -> "/*" <> value <> "*/"
     HashBangComment(value) -> "#!" <> value
     Whitespace(value) -> value
+    LineTerminator(value) -> value
 
     // Literals
     Identifier(value) -> value
