@@ -1,5 +1,151 @@
-import gleam/io
+import gleam/list
+import gleam/string
+import just/token.{type Token}
 
-pub fn main() -> Nil {
-  io.println("Hello from just!")
+pub opaque type Lexer {
+  Lexer(
+    source: String,
+    ignore_comments: Bool,
+    ignore_whitespace: Bool,
+    strict_mode: Bool,
+  )
+}
+
+pub fn new(source: String) -> Lexer {
+  Lexer(
+    source:,
+    ignore_comments: False,
+    ignore_whitespace: False,
+    strict_mode: False,
+  )
+}
+
+pub fn ignore_comments(lexer: Lexer) -> Lexer {
+  Lexer(..lexer, ignore_comments: True)
+}
+
+pub fn ignore_whitespace(lexer: Lexer) -> Lexer {
+  Lexer(..lexer, ignore_whitespace: True)
+}
+
+pub fn strict_mode(lexer: Lexer) -> Lexer {
+  Lexer(..lexer, strict_mode: True)
+}
+
+pub fn tokenise(lexer: Lexer) -> List(Token) {
+  let #(lexer, tokens) = maybe_lex_hashbang_comment(lexer)
+  do_tokenise(lexer, tokens)
+}
+
+fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
+  case lexer.source {
+    "#!" <> source -> {
+      let #(lexer, contents) =
+        lexer
+        |> advance(source)
+        |> lex_until_end_of_line("")
+
+      #(lexer, case lexer.ignore_comments {
+        True -> []
+        False -> [token.HashBangComment(contents)]
+      })
+    }
+    _ -> #(lexer, [])
+  }
+}
+
+fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
+  case lexer.source {
+    "" -> list.reverse(tokens)
+
+    "\u{0009}" as space <> source
+    | "\u{000B}" as space <> source
+    | "\u{000C}" as space <> source
+    | "\u{0020}" as space <> source
+    | "\u{1680}" as space <> source
+    | "\u{2000}" as space <> source
+    | "\u{2001}" as space <> source
+    | "\u{2002}" as space <> source
+    | "\u{2003}" as space <> source
+    | "\u{2004}" as space <> source
+    | "\u{2005}" as space <> source
+    | "\u{2006}" as space <> source
+    | "\u{2007}" as space <> source
+    | "\u{2008}" as space <> source
+    | "\u{2009}" as space <> source
+    | "\u{200A}" as space <> source
+    | "\u{202F}" as space <> source
+    | "\u{205F}" as space <> source
+    | "\u{3000}" as space <> source
+    | "\u{FEFF}" as space <> source -> {
+      let #(lexer, tokens) = whitespace(advance(lexer, source), tokens, space)
+      do_tokenise(lexer, tokens)
+    }
+
+    "\u{000A}" as space <> source
+    | "\u{000D}" as space <> source
+    | "\u{2028}" as space <> source
+    | "\u{2029}" as space <> source ->
+      do_tokenise(advance(lexer, source), case lexer.ignore_whitespace {
+        True -> tokens
+        False -> [token.LineTerminator(space), ..tokens]
+      })
+
+    _ -> list.reverse(tokens)
+  }
+}
+
+fn whitespace(
+  lexer: Lexer,
+  tokens: List(Token),
+  lexed: String,
+) -> #(Lexer, List(Token)) {
+  case lexer.source {
+    "\u{0009}" as space <> source
+    | "\u{000B}" as space <> source
+    | "\u{000C}" as space <> source
+    | "\u{0020}" as space <> source
+    | "\u{1680}" as space <> source
+    | "\u{2000}" as space <> source
+    | "\u{2001}" as space <> source
+    | "\u{2002}" as space <> source
+    | "\u{2003}" as space <> source
+    | "\u{2004}" as space <> source
+    | "\u{2005}" as space <> source
+    | "\u{2006}" as space <> source
+    | "\u{2007}" as space <> source
+    | "\u{2008}" as space <> source
+    | "\u{2009}" as space <> source
+    | "\u{200A}" as space <> source
+    | "\u{202F}" as space <> source
+    | "\u{205F}" as space <> source
+    | "\u{3000}" as space <> source
+    | "\u{FEFF}" as space <> source -> {
+      whitespace(advance(lexer, source), tokens, lexed <> space)
+    }
+    _ -> #(lexer, case lexer.ignore_whitespace {
+      True -> tokens
+      False -> [token.Whitespace(lexed), ..tokens]
+    })
+  }
+}
+
+fn lex_until_end_of_line(lexer: Lexer, lexed: String) -> #(Lexer, String) {
+  case lexer.source {
+    "" -> #(lexer, lexed)
+    "\n" <> source
+    | "\r" <> source
+    | "\u{2028}" <> source
+    | "\u{2029}" <> source -> #(advance(lexer, source), lexed)
+    _ ->
+      case string.pop_grapheme(lexer.source) {
+        Error(_) -> #(lexer, lexed)
+        Ok(#(char, source)) ->
+          lex_until_end_of_line(advance(lexer, source), lexed <> char)
+      }
+  }
+}
+
+fn advance(lexer: Lexer, source: String) -> Lexer {
+  Lexer(..lexer, source:)
 }
