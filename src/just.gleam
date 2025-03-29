@@ -91,6 +91,122 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
         False -> [token.LineTerminator(space), ..tokens]
       })
 
+    "{" <> source ->
+      do_tokenise(advance(lexer, source), [token.LeftBrace, ..tokens])
+    "}" <> source ->
+      do_tokenise(advance(lexer, source), [token.RightBrace, ..tokens])
+    "(" <> source ->
+      do_tokenise(advance(lexer, source), [token.LeftParen, ..tokens])
+    ")" <> source ->
+      do_tokenise(advance(lexer, source), [token.RightParen, ..tokens])
+    "[" <> source ->
+      do_tokenise(advance(lexer, source), [token.LeftSquare, ..tokens])
+    "]" <> source ->
+      do_tokenise(advance(lexer, source), [token.RightSquare, ..tokens])
+
+    "..." <> source ->
+      do_tokenise(advance(lexer, source), [token.TripleDot, ..tokens])
+    "." <> source -> do_tokenise(advance(lexer, source), [token.Dot, ..tokens])
+    ";" <> source ->
+      do_tokenise(advance(lexer, source), [token.Semicolon, ..tokens])
+    "," <> source ->
+      do_tokenise(advance(lexer, source), [token.Comma, ..tokens])
+    ":" <> source ->
+      do_tokenise(advance(lexer, source), [token.Colon, ..tokens])
+    "=>" <> source ->
+      do_tokenise(advance(lexer, source), [token.Arrow, ..tokens])
+
+    "<=" <> source ->
+      do_tokenise(advance(lexer, source), [token.LessEqual, ..tokens])
+    ">=" <> source ->
+      do_tokenise(advance(lexer, source), [token.GreaterEqual, ..tokens])
+    "===" <> source ->
+      do_tokenise(advance(lexer, source), [token.TripleEqual, ..tokens])
+    "!==" <> source ->
+      do_tokenise(advance(lexer, source), [token.BangDoubleEqual, ..tokens])
+    "==" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleEqual, ..tokens])
+    "!=" <> source ->
+      do_tokenise(advance(lexer, source), [token.BangEqual, ..tokens])
+
+    "=" <> source ->
+      do_tokenise(advance(lexer, source), [token.Equal, ..tokens])
+    "+=" <> source ->
+      do_tokenise(advance(lexer, source), [token.PlusEqual, ..tokens])
+    "-=" <> source ->
+      do_tokenise(advance(lexer, source), [token.MinusEqual, ..tokens])
+    "*=" <> source ->
+      do_tokenise(advance(lexer, source), [token.StarEqual, ..tokens])
+    "/=" <> source ->
+      do_tokenise(advance(lexer, source), [token.SlashEqual, ..tokens])
+    "%=" <> source ->
+      do_tokenise(advance(lexer, source), [token.PercentEqual, ..tokens])
+    "**=" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleStarEqual, ..tokens])
+    "<<=" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleLessEqual, ..tokens])
+    ">>=" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleGreaterEqual, ..tokens])
+    ">>>=" <> source ->
+      do_tokenise(advance(lexer, source), [token.TripleGreaterEqual, ..tokens])
+    "&=" <> source ->
+      do_tokenise(advance(lexer, source), [token.AmpersandEqual, ..tokens])
+    "|=" <> source ->
+      do_tokenise(advance(lexer, source), [token.PipeEqual, ..tokens])
+    "^=" <> source ->
+      do_tokenise(advance(lexer, source), [token.CaratEqual, ..tokens])
+    "&&=" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleAmpersandEqual, ..tokens])
+    "||=" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoublePipeEqual, ..tokens])
+    "??=" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleQuestionEqual, ..tokens])
+
+    "<<" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleLess, ..tokens])
+    ">>>" <> source ->
+      do_tokenise(advance(lexer, source), [token.TripleGreater, ..tokens])
+    ">>" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleGreater, ..tokens])
+
+    "!" <> source -> do_tokenise(advance(lexer, source), [token.Bang, ..tokens])
+    "&&" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleAmpersand, ..tokens])
+    "||" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoublePipe, ..tokens])
+    "??" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleQuestion, ..tokens])
+    "?." <> source ->
+      do_tokenise(advance(lexer, source), [token.QuestionDot, ..tokens])
+    "?" <> source ->
+      do_tokenise(advance(lexer, source), [token.Question, ..tokens])
+
+    "<" <> source -> do_tokenise(advance(lexer, source), [token.Less, ..tokens])
+    ">" <> source ->
+      do_tokenise(advance(lexer, source), [token.Greater, ..tokens])
+
+    "**" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleStar, ..tokens])
+    "++" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoublePlus, ..tokens])
+    "--" <> source ->
+      do_tokenise(advance(lexer, source), [token.DoubleMinus, ..tokens])
+    "+" <> source -> do_tokenise(advance(lexer, source), [token.Plus, ..tokens])
+    "-" <> source ->
+      do_tokenise(advance(lexer, source), [token.Minus, ..tokens])
+    "*" <> source -> do_tokenise(advance(lexer, source), [token.Star, ..tokens])
+    "/" <> source ->
+      do_tokenise(advance(lexer, source), [token.Slash, ..tokens])
+    "%" <> source ->
+      do_tokenise(advance(lexer, source), [token.Percent, ..tokens])
+    "&" <> source ->
+      do_tokenise(advance(lexer, source), [token.Ampersand, ..tokens])
+    "|" <> source -> do_tokenise(advance(lexer, source), [token.Pipe, ..tokens])
+    "^" <> source ->
+      do_tokenise(advance(lexer, source), [token.Caret, ..tokens])
+    "~" <> source ->
+      do_tokenise(advance(lexer, source), [token.Tilde, ..tokens])
+
     _ -> list.reverse(tokens)
   }
 }
