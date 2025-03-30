@@ -5,6 +5,7 @@ pub type Token {
   HashBangComment(String)
   Whitespace(String)
   LineTerminator(String)
+  EndOfFile
 
   // Literals
   Identifier(String)
@@ -178,6 +179,7 @@ pub fn to_source(token: Token) -> String {
     HashBangComment(value) -> "#!" <> value
     Whitespace(value) -> value
     LineTerminator(value) -> value
+    EndOfFile -> ""
 
     // Literals
     Identifier(value) -> value

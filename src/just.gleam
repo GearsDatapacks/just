@@ -55,8 +55,15 @@ fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
 }
 
 fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
+  case next(lexer) {
+    #(_, token.EndOfFile) -> list.reverse([token.EndOfFile, ..tokens])
+    #(lexer, token) -> do_tokenise(lexer, [token, ..tokens])
+  }
+}
+
+fn next(lexer: Lexer) -> #(Lexer, Token) {
   case lexer.source {
-    "" -> list.reverse(tokens)
+    "" -> #(lexer, token.EndOfFile)
 
     "\u{0009}" as space <> source
     | "\u{000B}" as space <> source
@@ -78,34 +85,28 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
     | "\u{205F}" as space <> source
     | "\u{3000}" as space <> source
     | "\u{FEFF}" as space <> source -> {
-      let #(lexer, tokens) = whitespace(advance(lexer, source), tokens, space)
-      do_tokenise(lexer, tokens)
+      whitespace(advance(lexer, source), space)
     }
 
     "\u{000A}" as space <> source
     | "\u{000D}" as space <> source
     | "\u{2028}" as space <> source
-    | "\u{2029}" as space <> source ->
-      do_tokenise(advance(lexer, source), case lexer.ignore_whitespace {
-        True -> tokens
-        False -> [token.LineTerminator(space), ..tokens]
-      })
+    | "\u{2029}" as space <> source -> {
+      let lexer = advance(lexer, source)
+      case lexer.ignore_whitespace {
+        True -> next(lexer)
+        False -> #(lexer, token.LineTerminator(space))
+      }
+    }
 
-    "0b" as prefix <> source -> {
-      let #(lexer, token) =
-        lex_radix_number(advance(lexer, source), 2, prefix, False)
-      do_tokenise(lexer, [token, ..tokens])
-    }
-    "0o" as prefix <> source -> {
-      let #(lexer, token) =
-        lex_radix_number(advance(lexer, source), 8, prefix, False)
-      do_tokenise(lexer, [token, ..tokens])
-    }
-    "0x" as prefix <> source -> {
-      let #(lexer, token) =
-        lex_radix_number(advance(lexer, source), 16, prefix, False)
-      do_tokenise(lexer, [token, ..tokens])
-    }
+    "0b" as prefix <> source ->
+      lex_radix_number(advance(lexer, source), 2, prefix, False)
+
+    "0o" as prefix <> source ->
+      lex_radix_number(advance(lexer, source), 8, prefix, False)
+
+    "0x" as prefix <> source ->
+      lex_radix_number(advance(lexer, source), 16, prefix, False)
 
     "00" as digit <> source
     | "01" as digit <> source
@@ -114,11 +115,8 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
     | "04" as digit <> source
     | "05" as digit <> source
     | "06" as digit <> source
-    | "07" as digit <> source -> {
-      let #(lexer, token) =
-        lex_leading_zero_number(advance(lexer, source), digit)
-      do_tokenise(lexer, [token, ..tokens])
-    }
+    | "07" as digit <> source ->
+      lex_leading_zero_number(advance(lexer, source), digit)
 
     "1" as digit <> source
     | "2" as digit <> source
@@ -129,11 +127,8 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
     | "7" as digit <> source
     | "8" as digit <> source
     | "9" as digit <> source
-    | "0" as digit <> source -> {
-      let #(lexer, token) =
-        lex_number(advance(lexer, source), digit, Initial, AfterNumber)
-      do_tokenise(lexer, [token, ..tokens])
-    }
+    | "0" as digit <> source ->
+      lex_number(advance(lexer, source), digit, Initial, AfterNumber)
 
     ".1" as digit <> source
     | ".2" as digit <> source
@@ -144,131 +139,77 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
     | ".7" as digit <> source
     | ".8" as digit <> source
     | ".9" as digit <> source
-    | ".0" as digit <> source -> {
-      let #(lexer, token) =
-        lex_number(advance(lexer, source), digit, Decimal, AfterNumber)
-      do_tokenise(lexer, [token, ..tokens])
-    }
+    | ".0" as digit <> source ->
+      lex_number(advance(lexer, source), digit, Decimal, AfterNumber)
 
-    "{" <> source ->
-      do_tokenise(advance(lexer, source), [token.LeftBrace, ..tokens])
-    "}" <> source ->
-      do_tokenise(advance(lexer, source), [token.RightBrace, ..tokens])
-    "(" <> source ->
-      do_tokenise(advance(lexer, source), [token.LeftParen, ..tokens])
-    ")" <> source ->
-      do_tokenise(advance(lexer, source), [token.RightParen, ..tokens])
-    "[" <> source ->
-      do_tokenise(advance(lexer, source), [token.LeftSquare, ..tokens])
-    "]" <> source ->
-      do_tokenise(advance(lexer, source), [token.RightSquare, ..tokens])
+    "{" <> source -> #(advance(lexer, source), token.LeftBrace)
+    "}" <> source -> #(advance(lexer, source), token.RightBrace)
+    "(" <> source -> #(advance(lexer, source), token.LeftParen)
+    ")" <> source -> #(advance(lexer, source), token.RightParen)
+    "[" <> source -> #(advance(lexer, source), token.LeftSquare)
+    "]" <> source -> #(advance(lexer, source), token.RightSquare)
 
-    "..." <> source ->
-      do_tokenise(advance(lexer, source), [token.TripleDot, ..tokens])
-    "." <> source -> do_tokenise(advance(lexer, source), [token.Dot, ..tokens])
-    ";" <> source ->
-      do_tokenise(advance(lexer, source), [token.Semicolon, ..tokens])
-    "," <> source ->
-      do_tokenise(advance(lexer, source), [token.Comma, ..tokens])
-    ":" <> source ->
-      do_tokenise(advance(lexer, source), [token.Colon, ..tokens])
-    "=>" <> source ->
-      do_tokenise(advance(lexer, source), [token.Arrow, ..tokens])
+    "..." <> source -> #(advance(lexer, source), token.TripleDot)
+    "." <> source -> #(advance(lexer, source), token.Dot)
+    ";" <> source -> #(advance(lexer, source), token.Semicolon)
+    "," <> source -> #(advance(lexer, source), token.Comma)
+    ":" <> source -> #(advance(lexer, source), token.Colon)
+    "=>" <> source -> #(advance(lexer, source), token.Arrow)
 
-    "<=" <> source ->
-      do_tokenise(advance(lexer, source), [token.LessEqual, ..tokens])
-    ">=" <> source ->
-      do_tokenise(advance(lexer, source), [token.GreaterEqual, ..tokens])
-    "===" <> source ->
-      do_tokenise(advance(lexer, source), [token.TripleEqual, ..tokens])
-    "!==" <> source ->
-      do_tokenise(advance(lexer, source), [token.BangDoubleEqual, ..tokens])
-    "==" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleEqual, ..tokens])
-    "!=" <> source ->
-      do_tokenise(advance(lexer, source), [token.BangEqual, ..tokens])
+    "<=" <> source -> #(advance(lexer, source), token.LessEqual)
+    ">=" <> source -> #(advance(lexer, source), token.GreaterEqual)
+    "===" <> source -> #(advance(lexer, source), token.TripleEqual)
+    "!==" <> source -> #(advance(lexer, source), token.BangDoubleEqual)
+    "==" <> source -> #(advance(lexer, source), token.DoubleEqual)
+    "!=" <> source -> #(advance(lexer, source), token.BangEqual)
 
-    "=" <> source ->
-      do_tokenise(advance(lexer, source), [token.Equal, ..tokens])
-    "+=" <> source ->
-      do_tokenise(advance(lexer, source), [token.PlusEqual, ..tokens])
-    "-=" <> source ->
-      do_tokenise(advance(lexer, source), [token.MinusEqual, ..tokens])
-    "*=" <> source ->
-      do_tokenise(advance(lexer, source), [token.StarEqual, ..tokens])
-    "/=" <> source ->
-      do_tokenise(advance(lexer, source), [token.SlashEqual, ..tokens])
-    "%=" <> source ->
-      do_tokenise(advance(lexer, source), [token.PercentEqual, ..tokens])
-    "**=" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleStarEqual, ..tokens])
-    "<<=" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleLessEqual, ..tokens])
-    ">>=" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleGreaterEqual, ..tokens])
-    ">>>=" <> source ->
-      do_tokenise(advance(lexer, source), [token.TripleGreaterEqual, ..tokens])
-    "&=" <> source ->
-      do_tokenise(advance(lexer, source), [token.AmpersandEqual, ..tokens])
-    "|=" <> source ->
-      do_tokenise(advance(lexer, source), [token.PipeEqual, ..tokens])
-    "^=" <> source ->
-      do_tokenise(advance(lexer, source), [token.CaratEqual, ..tokens])
-    "&&=" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleAmpersandEqual, ..tokens])
-    "||=" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoublePipeEqual, ..tokens])
-    "??=" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleQuestionEqual, ..tokens])
+    "=" <> source -> #(advance(lexer, source), token.Equal)
+    "+=" <> source -> #(advance(lexer, source), token.PlusEqual)
+    "-=" <> source -> #(advance(lexer, source), token.MinusEqual)
+    "*=" <> source -> #(advance(lexer, source), token.StarEqual)
+    "/=" <> source -> #(advance(lexer, source), token.SlashEqual)
+    "%=" <> source -> #(advance(lexer, source), token.PercentEqual)
+    "**=" <> source -> #(advance(lexer, source), token.DoubleStarEqual)
+    "<<=" <> source -> #(advance(lexer, source), token.DoubleLessEqual)
+    ">>=" <> source -> #(advance(lexer, source), token.DoubleGreaterEqual)
+    ">>>=" <> source -> #(advance(lexer, source), token.TripleGreaterEqual)
+    "&=" <> source -> #(advance(lexer, source), token.AmpersandEqual)
+    "|=" <> source -> #(advance(lexer, source), token.PipeEqual)
+    "^=" <> source -> #(advance(lexer, source), token.CaratEqual)
+    "&&=" <> source -> #(advance(lexer, source), token.DoubleAmpersandEqual)
+    "||=" <> source -> #(advance(lexer, source), token.DoublePipeEqual)
+    "??=" <> source -> #(advance(lexer, source), token.DoubleQuestionEqual)
 
-    "<<" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleLess, ..tokens])
-    ">>>" <> source ->
-      do_tokenise(advance(lexer, source), [token.TripleGreater, ..tokens])
-    ">>" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleGreater, ..tokens])
+    "<<" <> source -> #(advance(lexer, source), token.DoubleLess)
+    ">>>" <> source -> #(advance(lexer, source), token.TripleGreater)
+    ">>" <> source -> #(advance(lexer, source), token.DoubleGreater)
 
-    "!" <> source -> do_tokenise(advance(lexer, source), [token.Bang, ..tokens])
-    "&&" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleAmpersand, ..tokens])
-    "||" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoublePipe, ..tokens])
-    "??" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleQuestion, ..tokens])
-    "?." <> source ->
-      do_tokenise(advance(lexer, source), [token.QuestionDot, ..tokens])
-    "?" <> source ->
-      do_tokenise(advance(lexer, source), [token.Question, ..tokens])
+    "!" <> source -> #(advance(lexer, source), token.Bang)
+    "&&" <> source -> #(advance(lexer, source), token.DoubleAmpersand)
+    "||" <> source -> #(advance(lexer, source), token.DoublePipe)
+    "??" <> source -> #(advance(lexer, source), token.DoubleQuestion)
+    "?." <> source -> #(advance(lexer, source), token.QuestionDot)
+    "?" <> source -> #(advance(lexer, source), token.Question)
 
-    "<" <> source -> do_tokenise(advance(lexer, source), [token.Less, ..tokens])
-    ">" <> source ->
-      do_tokenise(advance(lexer, source), [token.Greater, ..tokens])
+    "<" <> source -> #(advance(lexer, source), token.Less)
+    ">" <> source -> #(advance(lexer, source), token.Greater)
 
-    "**" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleStar, ..tokens])
-    "++" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoublePlus, ..tokens])
-    "--" <> source ->
-      do_tokenise(advance(lexer, source), [token.DoubleMinus, ..tokens])
-    "+" <> source -> do_tokenise(advance(lexer, source), [token.Plus, ..tokens])
-    "-" <> source ->
-      do_tokenise(advance(lexer, source), [token.Minus, ..tokens])
-    "*" <> source -> do_tokenise(advance(lexer, source), [token.Star, ..tokens])
-    "/" <> source ->
-      do_tokenise(advance(lexer, source), [token.Slash, ..tokens])
-    "%" <> source ->
-      do_tokenise(advance(lexer, source), [token.Percent, ..tokens])
-    "&" <> source ->
-      do_tokenise(advance(lexer, source), [token.Ampersand, ..tokens])
-    "|" <> source -> do_tokenise(advance(lexer, source), [token.Pipe, ..tokens])
-    "^" <> source ->
-      do_tokenise(advance(lexer, source), [token.Caret, ..tokens])
-    "~" <> source ->
-      do_tokenise(advance(lexer, source), [token.Tilde, ..tokens])
+    "**" <> source -> #(advance(lexer, source), token.DoubleStar)
+    "++" <> source -> #(advance(lexer, source), token.DoublePlus)
+    "--" <> source -> #(advance(lexer, source), token.DoubleMinus)
+    "+" <> source -> #(advance(lexer, source), token.Plus)
+    "-" <> source -> #(advance(lexer, source), token.Minus)
+    "*" <> source -> #(advance(lexer, source), token.Star)
+    "/" <> source -> #(advance(lexer, source), token.Slash)
+    "%" <> source -> #(advance(lexer, source), token.Percent)
+    "&" <> source -> #(advance(lexer, source), token.Ampersand)
+    "|" <> source -> #(advance(lexer, source), token.Pipe)
+    "^" <> source -> #(advance(lexer, source), token.Caret)
+    "~" <> source -> #(advance(lexer, source), token.Tilde)
 
     "#" <> source -> {
       let #(lexer, name) = lex_identifier(advance(lexer, source), "")
-      do_tokenise(lexer, [token.PrivateIdentifier(name), ..tokens])
+      #(lexer, token.PrivateIdentifier(name))
     }
 
     "_" as character <> source
@@ -328,16 +269,15 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
       let #(lexer, name) = lex_identifier(advance(lexer, source), character)
 
       let token = identifier_token(name, lexer.strict_mode)
-
-      do_tokenise(lexer, [token, ..tokens])
+      #(lexer, token)
     }
 
     "'" as quote <> source | "\"" as quote <> source -> {
       let #(lexer, string) = lex_string(advance(lexer, source), quote, "")
-      do_tokenise(lexer, [token.String(quote, string), ..tokens])
+      #(lexer, token.String(quote, string))
     }
 
-    _ -> list.reverse(tokens)
+    _ -> #(lexer, token.EndOfFile)
   }
 }
 
@@ -642,11 +582,7 @@ fn lex_identifier(lexer: Lexer, lexed: String) -> #(Lexer, String) {
   }
 }
 
-fn whitespace(
-  lexer: Lexer,
-  tokens: List(Token),
-  lexed: String,
-) -> #(Lexer, List(Token)) {
+fn whitespace(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
   case lexer.source {
     "\t" as space <> source
     | "\u{000B}" as space <> source
@@ -668,12 +604,13 @@ fn whitespace(
     | "\u{205F}" as space <> source
     | "\u{3000}" as space <> source
     | "\u{FEFF}" as space <> source ->
-      whitespace(advance(lexer, source), tokens, lexed <> space)
+      whitespace(advance(lexer, source), lexed <> space)
 
-    _ -> #(lexer, case lexer.ignore_whitespace {
-      True -> tokens
-      False -> [token.Whitespace(lexed), ..tokens]
-    })
+    _ ->
+      case lexer.ignore_whitespace {
+        True -> next(lexer)
+        False -> #(lexer, token.Whitespace(lexed))
+      }
   }
 }
 
