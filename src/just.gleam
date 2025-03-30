@@ -327,73 +327,7 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
     | "Z" as character <> source -> {
       let #(lexer, name) = lex_identifier(advance(lexer, source), character)
 
-      let token = case name {
-        // Keywords
-        "break" -> token.Break
-        "case" -> token.Case
-        "catch" -> token.Catch
-        "class" -> token.Class
-        "const" -> token.Const
-        "continue" -> token.Continue
-        "debugger" -> token.Debugger
-        "default" -> token.Default
-        "delete" -> token.Delete
-        "do" -> token.Do
-        "else" -> token.Else
-        "export" -> token.Export
-        "extends" -> token.Extends
-        "false" -> token.False
-        "finally" -> token.Finally
-        "for" -> token.For
-        "function" -> token.Function
-        "if" -> token.If
-        "import" -> token.Import
-        "in" -> token.In
-        "instanceof" -> token.Instanceof
-        "new" -> token.New
-        "null" -> token.Null
-        "return" -> token.Return
-        "super" -> token.Super
-        "switch" -> token.Switch
-        "this" -> token.This
-        "throw" -> token.Throw
-        "true" -> token.True
-        "try" -> token.Try
-        "typeof" -> token.Typeof
-        "var" -> token.Var
-        "void" -> token.Void
-        "while" -> token.While
-        "with" -> token.With
-
-        // Keywords in strict mode
-        "let" if lexer.strict_mode -> token.Let
-        "static" if lexer.strict_mode -> token.Static
-        "yield" if lexer.strict_mode -> token.Yield
-
-        // Future reserved words
-        "enum" -> token.Enum
-
-        // Future reserved words in strict mode
-        "implements" if lexer.strict_mode -> token.Implements
-        "interface" if lexer.strict_mode -> token.Interface
-        "package" if lexer.strict_mode -> token.Package
-        "private" if lexer.strict_mode -> token.Private
-        "protected" if lexer.strict_mode -> token.Protected
-
-        // Contextual keywords
-        "as" -> token.ContextualKeyword(token.As)
-        "async" -> token.ContextualKeyword(token.Async)
-        "await" -> token.ContextualKeyword(token.Await)
-        "from" -> token.ContextualKeyword(token.From)
-        "get" -> token.ContextualKeyword(token.Get)
-        "let" -> token.ContextualKeyword(token.ContextualLet)
-        "of" -> token.ContextualKeyword(token.Of)
-        "set" -> token.ContextualKeyword(token.Set)
-        "static" -> token.ContextualKeyword(token.ContextualStatic)
-        "yield" -> token.ContextualKeyword(token.ContextualYield)
-
-        _ -> token.Identifier(name)
-      }
+      let token = identifier_token(name, lexer.strict_mode)
 
       do_tokenise(lexer, [token, ..tokens])
     }
@@ -404,6 +338,76 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
     }
 
     _ -> list.reverse(tokens)
+  }
+}
+
+fn identifier_token(name: String, strict_mode: Bool) -> Token {
+  case name {
+    // Keywords
+    "break" -> token.Break
+    "case" -> token.Case
+    "catch" -> token.Catch
+    "class" -> token.Class
+    "const" -> token.Const
+    "continue" -> token.Continue
+    "debugger" -> token.Debugger
+    "default" -> token.Default
+    "delete" -> token.Delete
+    "do" -> token.Do
+    "else" -> token.Else
+    "export" -> token.Export
+    "extends" -> token.Extends
+    "false" -> token.False
+    "finally" -> token.Finally
+    "for" -> token.For
+    "function" -> token.Function
+    "if" -> token.If
+    "import" -> token.Import
+    "in" -> token.In
+    "instanceof" -> token.Instanceof
+    "new" -> token.New
+    "null" -> token.Null
+    "return" -> token.Return
+    "super" -> token.Super
+    "switch" -> token.Switch
+    "this" -> token.This
+    "throw" -> token.Throw
+    "true" -> token.True
+    "try" -> token.Try
+    "typeof" -> token.Typeof
+    "var" -> token.Var
+    "void" -> token.Void
+    "while" -> token.While
+    "with" -> token.With
+
+    // Keywords in strict mode
+    "let" if strict_mode -> token.Let
+    "static" if strict_mode -> token.Static
+    "yield" if strict_mode -> token.Yield
+
+    // Future reserved words
+    "enum" -> token.Enum
+
+    // Future reserved words in strict mode
+    "implements" if strict_mode -> token.Implements
+    "interface" if strict_mode -> token.Interface
+    "package" if strict_mode -> token.Package
+    "private" if strict_mode -> token.Private
+    "protected" if strict_mode -> token.Protected
+
+    // Contextual keywords
+    "as" -> token.ContextualKeyword(token.As)
+    "async" -> token.ContextualKeyword(token.Async)
+    "await" -> token.ContextualKeyword(token.Await)
+    "from" -> token.ContextualKeyword(token.From)
+    "get" -> token.ContextualKeyword(token.Get)
+    "let" -> token.ContextualKeyword(token.ContextualLet)
+    "of" -> token.ContextualKeyword(token.Of)
+    "set" -> token.ContextualKeyword(token.Set)
+    "static" -> token.ContextualKeyword(token.ContextualStatic)
+    "yield" -> token.ContextualKeyword(token.ContextualYield)
+
+    _ -> token.Identifier(name)
   }
 }
 
