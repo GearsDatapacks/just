@@ -339,7 +339,34 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
       do_tokenise(lexer, [token, ..tokens])
     }
 
+    "'" as quote <> source | "\"" as quote <> source -> {
+      let #(lexer, string) = lex_string(advance(lexer, source), quote, "")
+      do_tokenise(lexer, [token.String(quote, string), ..tokens])
+    }
+
     _ -> list.reverse(tokens)
+  }
+}
+
+fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, String) {
+  case string.pop_grapheme(lexer.source) {
+    Error(_) -> #(lexer, contents)
+    Ok(#(character, source)) if character == quote -> #(
+      advance(lexer, source),
+      contents,
+    )
+    Ok(#("\\", source)) ->
+      case string.pop_grapheme(source) {
+        Error(_) -> #(lexer, contents)
+        Ok(#(character, source)) ->
+          lex_string(
+            advance(lexer, source),
+            quote,
+            contents <> "\\" <> character,
+          )
+      }
+    Ok(#(character, source)) ->
+      lex_string(advance(lexer, source), quote, contents <> character)
   }
 }
 
@@ -452,7 +479,6 @@ fn whitespace(
 
 fn lex_until_end_of_line(lexer: Lexer, lexed: String) -> #(Lexer, String) {
   case lexer.source {
-    "" -> #(lexer, lexed)
     "\n" <> source
     | "\r" <> source
     | "\u{2028}" <> source
