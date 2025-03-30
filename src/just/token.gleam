@@ -59,9 +59,6 @@ pub type Token {
   Static
   Yield
 
-  // Keywords in an async function
-  Await
-
   // Future reserved words
   Enum
 
@@ -148,20 +145,28 @@ pub type Token {
 pub type ContextualKeyword {
   As
   Async
+  Await
   From
   Get
+  ContextualLet
   Of
   Set
+  ContextualStatic
+  ContextualYield
 }
 
 pub fn contextual_keyword_name(keyword: ContextualKeyword) -> String {
   case keyword {
     As -> "as"
     Async -> "async"
+    Await -> "await"
     From -> "from"
     Get -> "get"
+    ContextualLet -> "let"
     Of -> "of"
+    ContextualStatic -> "static"
     Set -> "set"
+    ContextualYield -> "yield"
   }
 }
 
@@ -226,9 +231,6 @@ pub fn to_source(token: Token) -> String {
     Let -> "let"
     Static -> "static"
     Yield -> "yield"
-
-    // Keywords in an async function
-    Await -> "await"
 
     // Future reserved words
     Enum -> "enum"

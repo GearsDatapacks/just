@@ -207,7 +207,211 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
     "~" <> source ->
       do_tokenise(advance(lexer, source), [token.Tilde, ..tokens])
 
+    "#" <> source -> {
+      let #(lexer, name) = lex_identifier(advance(lexer, source), "")
+      do_tokenise(lexer, [token.PrivateIdentifier(name), ..tokens])
+    }
+
+    "_" as character <> source
+    | "$" as character <> source
+    | "a" as character <> source
+    | "b" as character <> source
+    | "c" as character <> source
+    | "d" as character <> source
+    | "e" as character <> source
+    | "f" as character <> source
+    | "g" as character <> source
+    | "h" as character <> source
+    | "i" as character <> source
+    | "j" as character <> source
+    | "k" as character <> source
+    | "l" as character <> source
+    | "m" as character <> source
+    | "n" as character <> source
+    | "o" as character <> source
+    | "p" as character <> source
+    | "q" as character <> source
+    | "r" as character <> source
+    | "s" as character <> source
+    | "t" as character <> source
+    | "u" as character <> source
+    | "v" as character <> source
+    | "w" as character <> source
+    | "x" as character <> source
+    | "y" as character <> source
+    | "z" as character <> source
+    | "A" as character <> source
+    | "B" as character <> source
+    | "C" as character <> source
+    | "D" as character <> source
+    | "E" as character <> source
+    | "F" as character <> source
+    | "G" as character <> source
+    | "H" as character <> source
+    | "I" as character <> source
+    | "J" as character <> source
+    | "K" as character <> source
+    | "L" as character <> source
+    | "M" as character <> source
+    | "N" as character <> source
+    | "O" as character <> source
+    | "P" as character <> source
+    | "Q" as character <> source
+    | "R" as character <> source
+    | "S" as character <> source
+    | "T" as character <> source
+    | "U" as character <> source
+    | "V" as character <> source
+    | "W" as character <> source
+    | "X" as character <> source
+    | "Y" as character <> source
+    | "Z" as character <> source -> {
+      let #(lexer, name) = lex_identifier(advance(lexer, source), character)
+
+      let token = case name {
+        // Keywords
+        "break" -> token.Break
+        "case" -> token.Case
+        "catch" -> token.Catch
+        "class" -> token.Class
+        "const" -> token.Const
+        "continue" -> token.Continue
+        "debugger" -> token.Debugger
+        "default" -> token.Default
+        "delete" -> token.Delete
+        "do" -> token.Do
+        "else" -> token.Else
+        "export" -> token.Export
+        "extends" -> token.Extends
+        "false" -> token.False
+        "finally" -> token.Finally
+        "for" -> token.For
+        "function" -> token.Function
+        "if" -> token.If
+        "import" -> token.Import
+        "in" -> token.In
+        "instanceof" -> token.Instanceof
+        "new" -> token.New
+        "null" -> token.Null
+        "return" -> token.Return
+        "super" -> token.Super
+        "switch" -> token.Switch
+        "this" -> token.This
+        "throw" -> token.Throw
+        "true" -> token.True
+        "try" -> token.Try
+        "typeof" -> token.Typeof
+        "var" -> token.Var
+        "void" -> token.Void
+        "while" -> token.While
+        "with" -> token.With
+
+        // Keywords in strict mode
+        "let" if lexer.strict_mode -> token.Let
+        "static" if lexer.strict_mode -> token.Static
+        "yield" if lexer.strict_mode -> token.Yield
+
+        // Future reserved words
+        "enum" -> token.Enum
+
+        // Future reserved words in strict mode
+        "implements" if lexer.strict_mode -> token.Implements
+        "interface" if lexer.strict_mode -> token.Interface
+        "package" if lexer.strict_mode -> token.Package
+        "private" if lexer.strict_mode -> token.Private
+        "protected" if lexer.strict_mode -> token.Protected
+
+        // Contextual keywords
+        "as" -> token.ContextualKeyword(token.As)
+        "async" -> token.ContextualKeyword(token.Async)
+        "await" -> token.ContextualKeyword(token.Await)
+        "from" -> token.ContextualKeyword(token.From)
+        "get" -> token.ContextualKeyword(token.Get)
+        "let" -> token.ContextualKeyword(token.ContextualLet)
+        "of" -> token.ContextualKeyword(token.Of)
+        "set" -> token.ContextualKeyword(token.Set)
+        "static" -> token.ContextualKeyword(token.ContextualStatic)
+        "yield" -> token.ContextualKeyword(token.ContextualYield)
+
+        _ -> token.Identifier(name)
+      }
+
+      do_tokenise(lexer, [token, ..tokens])
+    }
+
     _ -> list.reverse(tokens)
+  }
+}
+
+fn lex_identifier(lexer: Lexer, lexed: String) -> #(Lexer, String) {
+  case lexer.source {
+    "_" as character <> source
+    | "$" as character <> source
+    | "a" as character <> source
+    | "b" as character <> source
+    | "c" as character <> source
+    | "d" as character <> source
+    | "e" as character <> source
+    | "f" as character <> source
+    | "g" as character <> source
+    | "h" as character <> source
+    | "i" as character <> source
+    | "j" as character <> source
+    | "k" as character <> source
+    | "l" as character <> source
+    | "m" as character <> source
+    | "n" as character <> source
+    | "o" as character <> source
+    | "p" as character <> source
+    | "q" as character <> source
+    | "r" as character <> source
+    | "s" as character <> source
+    | "t" as character <> source
+    | "u" as character <> source
+    | "v" as character <> source
+    | "w" as character <> source
+    | "x" as character <> source
+    | "y" as character <> source
+    | "z" as character <> source
+    | "A" as character <> source
+    | "B" as character <> source
+    | "C" as character <> source
+    | "D" as character <> source
+    | "E" as character <> source
+    | "F" as character <> source
+    | "G" as character <> source
+    | "H" as character <> source
+    | "I" as character <> source
+    | "J" as character <> source
+    | "K" as character <> source
+    | "L" as character <> source
+    | "M" as character <> source
+    | "N" as character <> source
+    | "O" as character <> source
+    | "P" as character <> source
+    | "Q" as character <> source
+    | "R" as character <> source
+    | "S" as character <> source
+    | "T" as character <> source
+    | "U" as character <> source
+    | "V" as character <> source
+    | "W" as character <> source
+    | "X" as character <> source
+    | "Y" as character <> source
+    | "Z" as character <> source
+    | "0" as character <> source
+    | "1" as character <> source
+    | "2" as character <> source
+    | "3" as character <> source
+    | "4" as character <> source
+    | "5" as character <> source
+    | "6" as character <> source
+    | "7" as character <> source
+    | "8" as character <> source
+    | "9" as character <> source ->
+      lex_identifier(advance(lexer, source), lexed <> character)
+
+    _ -> #(lexer, lexed)
   }
 }
 
@@ -236,9 +440,9 @@ fn whitespace(
     | "\u{202F}" as space <> source
     | "\u{205F}" as space <> source
     | "\u{3000}" as space <> source
-    | "\u{FEFF}" as space <> source -> {
+    | "\u{FEFF}" as space <> source ->
       whitespace(advance(lexer, source), tokens, lexed <> space)
-    }
+
     _ -> #(lexer, case lexer.ignore_whitespace {
       True -> tokens
       False -> [token.Whitespace(lexed), ..tokens]
