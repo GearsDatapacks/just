@@ -421,10 +421,10 @@ fn whitespace(
   lexed: String,
 ) -> #(Lexer, List(Token)) {
   case lexer.source {
-    "\u{0009}" as space <> source
+    "\t" as space <> source
     | "\u{000B}" as space <> source
-    | "\u{000C}" as space <> source
-    | "\u{0020}" as space <> source
+    | "\f" as space <> source
+    | " " as space <> source
     | "\u{1680}" as space <> source
     | "\u{2000}" as space <> source
     | "\u{2001}" as space <> source
