@@ -91,6 +91,65 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
         False -> [token.LineTerminator(space), ..tokens]
       })
 
+    "0b" as prefix <> source -> {
+      let #(lexer, token) =
+        lex_radix_number(advance(lexer, source), 2, prefix, False)
+      do_tokenise(lexer, [token, ..tokens])
+    }
+    "0o" as prefix <> source -> {
+      let #(lexer, token) =
+        lex_radix_number(advance(lexer, source), 8, prefix, False)
+      do_tokenise(lexer, [token, ..tokens])
+    }
+    "0x" as prefix <> source -> {
+      let #(lexer, token) =
+        lex_radix_number(advance(lexer, source), 16, prefix, False)
+      do_tokenise(lexer, [token, ..tokens])
+    }
+
+    "00" as digit <> source
+    | "01" as digit <> source
+    | "02" as digit <> source
+    | "03" as digit <> source
+    | "04" as digit <> source
+    | "05" as digit <> source
+    | "06" as digit <> source
+    | "07" as digit <> source -> {
+      let #(lexer, token) =
+        lex_leading_zero_number(advance(lexer, source), digit)
+      do_tokenise(lexer, [token, ..tokens])
+    }
+
+    "1" as digit <> source
+    | "2" as digit <> source
+    | "3" as digit <> source
+    | "4" as digit <> source
+    | "5" as digit <> source
+    | "6" as digit <> source
+    | "7" as digit <> source
+    | "8" as digit <> source
+    | "9" as digit <> source
+    | "0" as digit <> source -> {
+      let #(lexer, token) =
+        lex_number(advance(lexer, source), digit, Initial, AfterNumber)
+      do_tokenise(lexer, [token, ..tokens])
+    }
+
+    ".1" as digit <> source
+    | ".2" as digit <> source
+    | ".3" as digit <> source
+    | ".4" as digit <> source
+    | ".5" as digit <> source
+    | ".6" as digit <> source
+    | ".7" as digit <> source
+    | ".8" as digit <> source
+    | ".9" as digit <> source
+    | ".0" as digit <> source -> {
+      let #(lexer, token) =
+        lex_number(advance(lexer, source), digit, Decimal, AfterNumber)
+      do_tokenise(lexer, [token, ..tokens])
+    }
+
     "{" <> source ->
       do_tokenise(advance(lexer, source), [token.LeftBrace, ..tokens])
     "}" <> source ->
@@ -345,6 +404,143 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
     }
 
     _ -> list.reverse(tokens)
+  }
+}
+
+type LexNumberMode {
+  Initial
+  Decimal
+  ExponentInitial
+  ExponentAfterMinus
+  ExponentBody
+}
+
+type DelimitedPosition {
+  AfterDecimal
+  AfterNumber
+  AfterDelimiter
+}
+
+fn lex_number(
+  lexer: Lexer,
+  lexed: String,
+  mode: LexNumberMode,
+  position: DelimitedPosition,
+) -> #(Lexer, Token) {
+  case lexer.source, mode, position {
+    "0" as digit <> source, _, _
+    | "1" as digit <> source, _, _
+    | "2" as digit <> source, _, _
+    | "3" as digit <> source, _, _
+    | "4" as digit <> source, _, _
+    | "5" as digit <> source, _, _
+    | "6" as digit <> source, _, _
+    | "7" as digit <> source, _, _
+    | "8" as digit <> source, _, _
+    | "9" as digit <> source, _, _
+    ->
+      lex_number(
+        advance(lexer, source),
+        lexed <> digit,
+        case mode {
+          ExponentInitial | ExponentAfterMinus -> ExponentBody
+          _ -> mode
+        },
+        AfterNumber,
+      )
+
+    "." <> source, Initial, AfterNumber ->
+      lex_number(advance(lexer, source), lexed <> ".", Decimal, AfterDecimal)
+
+    "e" <> source, Initial, AfterNumber | "e" <> source, Decimal, AfterNumber ->
+      lex_number(
+        advance(lexer, source),
+        lexed <> "e",
+        ExponentInitial,
+        AfterDelimiter,
+      )
+
+    "-" <> source, ExponentInitial, _ ->
+      lex_number(
+        advance(lexer, source),
+        lexed <> "-",
+        ExponentAfterMinus,
+        AfterDelimiter,
+      )
+
+    "_" <> source, _, AfterNumber ->
+      lex_number(advance(lexer, source), lexed <> "_", mode, AfterDelimiter)
+
+    "n" <> source, Initial, AfterNumber -> #(
+      advance(lexer, source),
+      token.BigInt(lexed),
+    )
+
+    _, _, _ -> #(lexer, token.Number(lexed))
+  }
+}
+
+fn lex_leading_zero_number(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
+  case lexer.source {
+    "0" as digit <> source
+    | "1" as digit <> source
+    | "2" as digit <> source
+    | "3" as digit <> source
+    | "4" as digit <> source
+    | "5" as digit <> source
+    | "6" as digit <> source
+    | "7" as digit <> source ->
+      lex_leading_zero_number(advance(lexer, source), lexed <> digit)
+
+    _ -> #(lexer, token.Number(lexed))
+  }
+}
+
+fn lex_radix_number(
+  lexer: Lexer,
+  radix: Int,
+  lexed: String,
+  valid_delimiter: Bool,
+) -> #(Lexer, Token) {
+  case lexer.source {
+    "0" as digit <> source | "1" as digit <> source ->
+      lex_radix_number(advance(lexer, source), radix, lexed <> digit, True)
+
+    "2" as digit <> source
+      | "3" as digit <> source
+      | "4" as digit <> source
+      | "5" as digit <> source
+      | "6" as digit <> source
+      | "7" as digit <> source
+      if radix >= 8
+    -> lex_radix_number(advance(lexer, source), radix, lexed <> digit, True)
+
+    "8" as digit <> source
+      | "9" as digit <> source
+      | "A" as digit <> source
+      | "B" as digit <> source
+      | "C" as digit <> source
+      | "D" as digit <> source
+      | "E" as digit <> source
+      | "F" as digit <> source
+      | "a" as digit <> source
+      | "b" as digit <> source
+      | "c" as digit <> source
+      | "d" as digit <> source
+      | "e" as digit <> source
+      | "f" as digit <> source
+      if radix == 16
+    -> lex_radix_number(advance(lexer, source), radix, lexed <> digit, True)
+
+    "n" <> source if valid_delimiter -> #(
+      advance(lexer, source),
+      token.BigInt(lexed),
+    )
+
+    "_" <> source if valid_delimiter ->
+      lex_radix_number(advance(lexer, source), radix, lexed <> "_", False)
+
+    _ -> #(lexer, token.Number(lexed))
   }
 }
 
