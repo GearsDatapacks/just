@@ -99,6 +99,21 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
       }
     }
 
+    "//" <> source -> {
+      let #(lexer, contents) = lex_until_end_of_line(advance(lexer, source), "")
+      case lexer.ignore_comments {
+        True -> next(lexer)
+        False -> #(lexer, token.SingleLineComment(contents))
+      }
+    }
+    "/*" <> source -> {
+      let #(lexer, contents) = lex_multiline_comment(advance(lexer, source), "")
+      case lexer.ignore_comments {
+        True -> next(lexer)
+        False -> #(lexer, token.MultiLineComment(contents))
+      }
+    }
+
     "0b" as prefix <> source ->
       lex_radix_number(advance(lexer, source), 2, prefix, False)
 
@@ -278,6 +293,18 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
     }
 
     _ -> #(lexer, token.EndOfFile)
+  }
+}
+
+fn lex_multiline_comment(lexer: Lexer, lexed: String) -> #(Lexer, String) {
+  case lexer.source {
+    "*/" <> source -> #(advance(lexer, source), lexed)
+    _ ->
+      case string.pop_grapheme(lexer.source) {
+        Error(_) -> #(lexer, lexed)
+        Ok(#(char, source)) ->
+          lex_multiline_comment(advance(lexer, source), lexed <> char)
+      }
   }
 }
 
