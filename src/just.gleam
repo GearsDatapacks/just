@@ -24,6 +24,9 @@ pub type Error {
   UnterminatedComment
   UnterminatedRegularExpression
   UnterminatedTemplate
+  LetterAfterNumber
+  NumericSeparatorNotAllowed
+  NumberEndAfterExponent
 }
 
 pub fn new(source: String) -> Lexer {
@@ -432,15 +435,14 @@ fn identifier_token(name: String, strict_mode: Bool) -> Token {
 type LexNumberMode {
   Initial
   Decimal
-  ExponentInitial
-  ExponentAfterMinus
-  ExponentBody
+  Exponent
 }
 
 type DelimitedPosition {
   AfterDecimal
   AfterNumber
-  AfterDelimiter
+  AfterSeparator
+  AfterExponent
 }
 
 fn lex_number(
@@ -460,45 +462,41 @@ fn lex_number(
     | "7" as digit <> source, _, _
     | "8" as digit <> source, _, _
     | "9" as digit <> source, _, _
-    ->
-      lex_number(
-        advance(lexer, source),
-        lexed <> digit,
-        case mode {
-          ExponentInitial | ExponentAfterMinus -> ExponentBody
-          _ -> mode
-        },
-        AfterNumber,
-      )
+    -> lex_number(advance(lexer, source), lexed <> digit, mode, AfterNumber)
 
     "." <> source, Initial, AfterNumber ->
       lex_number(advance(lexer, source), lexed <> ".", Decimal, AfterDecimal)
 
-    "e" <> source, Initial, AfterNumber | "e" <> source, Decimal, AfterNumber ->
-      lex_number(
-        advance(lexer, source),
-        lexed <> "e",
-        ExponentInitial,
-        AfterDelimiter,
-      )
+    "e-" <> source, Initial, AfterNumber | "e-" <> source, Decimal, AfterNumber ->
+      lex_number(advance(lexer, source), lexed <> "e-", Exponent, AfterExponent)
 
-    "-" <> source, ExponentInitial, _ ->
-      lex_number(
-        advance(lexer, source),
-        lexed <> "-",
-        ExponentAfterMinus,
-        AfterDelimiter,
-      )
+    "e" <> source, Initial, AfterNumber | "e" <> source, Decimal, AfterNumber ->
+      lex_number(advance(lexer, source), lexed <> "e", Exponent, AfterExponent)
 
     "_" <> source, _, AfterNumber ->
-      lex_number(advance(lexer, source), lexed <> "_", mode, AfterDelimiter)
+      lex_number(advance(lexer, source), lexed <> "_", mode, AfterSeparator)
+
+    "_" <> _, _, _ -> #(
+      error(lexer, NumericSeparatorNotAllowed),
+      token.Number(lexed),
+    )
 
     "n" <> source, Initial, AfterNumber -> #(
-      advance(lexer, source),
+      ensure_no_letters_after_numbers(advance(lexer, source)),
       token.BigInt(lexed),
     )
 
-    _, _, _ -> #(lexer, token.Number(lexed))
+    _, _, AfterExponent -> #(
+      error(lexer, NumberEndAfterExponent),
+      token.Number(lexed),
+    )
+
+    _, _, AfterSeparator -> #(
+      error(lexer, NumericSeparatorNotAllowed),
+      token.Number(lexed),
+    )
+
+    _, _, _ -> #(ensure_no_letters_after_numbers(lexer), token.Number(lexed))
   }
 }
 
@@ -563,6 +561,66 @@ fn lex_radix_number(
       lex_radix_number(advance(lexer, source), radix, lexed <> "_", False)
 
     _ -> #(lexer, token.Number(lexed))
+  }
+}
+
+fn ensure_no_letters_after_numbers(lexer: Lexer) -> Lexer {
+  case lexer.source {
+    "_" <> _source
+    | "$" <> _source
+    | "a" <> _source
+    | "b" <> _source
+    | "c" <> _source
+    | "d" <> _source
+    | "e" <> _source
+    | "f" <> _source
+    | "g" <> _source
+    | "h" <> _source
+    | "i" <> _source
+    | "j" <> _source
+    | "k" <> _source
+    | "l" <> _source
+    | "m" <> _source
+    | "n" <> _source
+    | "o" <> _source
+    | "p" <> _source
+    | "q" <> _source
+    | "r" <> _source
+    | "s" <> _source
+    | "t" <> _source
+    | "u" <> _source
+    | "v" <> _source
+    | "w" <> _source
+    | "x" <> _source
+    | "y" <> _source
+    | "z" <> _source
+    | "A" <> _source
+    | "B" <> _source
+    | "C" <> _source
+    | "D" <> _source
+    | "E" <> _source
+    | "F" <> _source
+    | "G" <> _source
+    | "H" <> _source
+    | "I" <> _source
+    | "J" <> _source
+    | "K" <> _source
+    | "L" <> _source
+    | "M" <> _source
+    | "N" <> _source
+    | "O" <> _source
+    | "P" <> _source
+    | "Q" <> _source
+    | "R" <> _source
+    | "S" <> _source
+    | "T" <> _source
+    | "U" <> _source
+    | "V" <> _source
+    | "W" <> _source
+    | "X" <> _source
+    | "Y" <> _source
+    | "Z" <> _source -> error(lexer, LetterAfterNumber)
+    _ -> lexer
   }
 }
 
