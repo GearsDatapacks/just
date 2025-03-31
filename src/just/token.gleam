@@ -188,9 +188,9 @@ pub fn to_source(token: Token) -> String {
     BigInt(value) -> value <> "n"
     String(quote:, contents:) -> quote <> contents <> quote
     RegularExpression(value) -> "/" <> value <> "/"
-    TemplateHead(value) -> "`" <> value
-    TemplateMiddle(value) -> value
-    TemplateTail(value) -> value <> "`"
+    TemplateHead(value) -> "`" <> value <> "${"
+    TemplateMiddle(value) -> "}" <> value <> "${"
+    TemplateTail(value) -> "}" <> value <> "`"
 
     // Keywords
     Break -> "break"

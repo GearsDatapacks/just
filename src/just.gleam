@@ -57,6 +57,15 @@ fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
 fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
   case next(lexer) {
     #(_, token.EndOfFile) -> list.reverse([token.EndOfFile, ..tokens])
+    #(lexer, token.TemplateHead(_) as token) -> {
+      let #(lexer, tokens) =
+        lex_template_parts(
+          lexer,
+          [token, ..tokens],
+          LexTokens(bracket_level: 0),
+        )
+      do_tokenise(lexer, tokens)
+    }
     #(lexer, token) -> do_tokenise(lexer, [token, ..tokens])
   }
 }
@@ -65,10 +74,10 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
   case lexer.source {
     "" -> #(lexer, token.EndOfFile)
 
-    "\u{0009}" as space <> source
+    "\t" as space <> source
     | "\u{000B}" as space <> source
-    | "\u{000C}" as space <> source
-    | "\u{0020}" as space <> source
+    | "\f" as space <> source
+    | " " as space <> source
     | "\u{1680}" as space <> source
     | "\u{2000}" as space <> source
     | "\u{2001}" as space <> source
@@ -291,6 +300,8 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
       let #(lexer, string) = lex_string(advance(lexer, source), quote, "")
       #(lexer, token.String(quote, string))
     }
+
+    "`" <> source -> lex_template_head(advance(lexer, source), "")
 
     _ -> #(lexer, token.EndOfFile)
   }
@@ -534,6 +545,92 @@ fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, String)
       }
     Ok(#(character, source)) ->
       lex_string(advance(lexer, source), quote, contents <> character)
+  }
+}
+
+fn lex_template_head(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
+  case lexer.source {
+    "${" <> source -> #(advance(lexer, source), token.TemplateHead(lexed))
+    "`" <> source -> #(advance(lexer, source), token.String("`", lexed))
+    "\\" <> source ->
+      case string.pop_grapheme(source) {
+        Error(_) -> #(lexer, token.String("`", lexed))
+        Ok(#(character, source)) ->
+          lex_template_head(advance(lexer, source), lexed <> "\\" <> character)
+      }
+    _ ->
+      case string.pop_grapheme(lexer.source) {
+        Error(_) -> #(lexer, token.String("`", lexed))
+        Ok(#(character, source)) ->
+          lex_template_head(advance(lexer, source), lexed <> character)
+      }
+  }
+}
+
+type LexTemplateMode {
+  LexTokens(bracket_level: Int)
+  LexTemplate(lexed: String)
+}
+
+fn lex_template_parts(
+  lexer: Lexer,
+  tokens: List(Token),
+  mode: LexTemplateMode,
+) -> #(Lexer, List(Token)) {
+  case mode {
+    LexTemplate(lexed) ->
+      case lexer.source {
+        "`" <> source -> #(advance(lexer, source), [
+          token.TemplateTail(lexed),
+          ..tokens
+        ])
+        "${" <> source ->
+          lex_template_parts(
+            advance(lexer, source),
+            [token.TemplateMiddle(lexed), ..tokens],
+            LexTokens(0),
+          )
+        "\\" <> source ->
+          case string.pop_grapheme(source) {
+            Error(_) -> #(lexer, [token.TemplateTail(lexed), ..tokens])
+            Ok(#(character, source)) ->
+              lex_template_parts(
+                advance(lexer, source),
+                tokens,
+                LexTemplate(lexed <> "\\" <> character),
+              )
+          }
+        _ ->
+          case string.pop_grapheme(lexer.source) {
+            Error(_) -> #(lexer, [token.TemplateTail(lexed), ..tokens])
+            Ok(#(character, source)) ->
+              lex_template_parts(
+                advance(lexer, source),
+                tokens,
+                LexTemplate(lexed <> character),
+              )
+          }
+      }
+
+    LexTokens(bracket_level) ->
+      case next(lexer) {
+        #(lexer, token.EndOfFile) -> #(lexer, tokens)
+        #(lexer, token.RightBrace) if bracket_level == 0 ->
+          lex_template_parts(lexer, tokens, LexTemplate(""))
+        #(lexer, token.RightBrace) ->
+          lex_template_parts(
+            lexer,
+            [token.RightBrace, ..tokens],
+            LexTokens(bracket_level - 1),
+          )
+        #(lexer, token.LeftBrace) ->
+          lex_template_parts(
+            lexer,
+            [token.LeftBrace, ..tokens],
+            LexTokens(bracket_level + 1),
+          )
+        #(lexer, token) -> lex_template_parts(lexer, [token, ..tokens], mode)
+      }
   }
 }
 
