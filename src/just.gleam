@@ -26,7 +26,24 @@ pub type Error {
   UnterminatedTemplate
   LetterAfterNumber
   NumericSeparatorNotAllowed
-  NumberEndAfterExponent
+  ExpectedExponent
+  InvalidPrivateIdentifier(identifier: String)
+}
+
+pub fn stringify_error(error: Error) -> String {
+  case error {
+    InvalidPrivateIdentifier(identifier) ->
+      "Invalid private identifier: `" <> identifier <> "`"
+    LetterAfterNumber ->
+      "Identifier characters cannot appear directly after numbers"
+    ExpectedExponent -> "Expected an exponent"
+    NumericSeparatorNotAllowed -> "Numeric separator is not allowed here"
+    UnknownCharacter(character) -> "Unexpected character: `" <> character <> "`"
+    UnterminatedComment -> "Unterminated comment"
+    UnterminatedRegularExpression -> "Unterminated regular expression literal"
+    UnterminatedString -> "Unterminated strint literal"
+    UnterminatedTemplate -> "Unterminated template literal"
+  }
 }
 
 pub fn new(source: String) -> Lexer {
@@ -261,6 +278,22 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
 
     "#" <> source -> {
       let #(lexer, name) = lex_identifier(advance(lexer, source), "")
+
+      let lexer = case name {
+        ""
+        | "0" <> _
+        | "1" <> _
+        | "2" <> _
+        | "3" <> _
+        | "4" <> _
+        | "5" <> _
+        | "6" <> _
+        | "7" <> _
+        | "8" <> _
+        | "9" <> _ -> error(lexer, InvalidPrivateIdentifier("#" <> name))
+        _ -> lexer
+      }
+
       #(lexer, token.PrivateIdentifier(name))
     }
 
@@ -487,7 +520,7 @@ fn lex_number(
     )
 
     _, _, AfterExponent -> #(
-      error(lexer, NumberEndAfterExponent),
+      error(lexer, ExpectedExponent),
       token.Number(lexed),
     )
 
