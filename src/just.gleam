@@ -844,10 +844,11 @@ fn lex_template_parts(
 
 fn lex_regex(lexer: Lexer, lexed: String, in_group: Bool) -> #(Lexer, Token) {
   case lexer.source {
-    "/" <> source if !in_group -> #(
-      advance(lexer, source),
-      token.RegularExpression(lexed),
-    )
+    "/" <> source if !in_group -> {
+      let lexer = advance(lexer, source)
+      let #(lexer, flags) = lex_identifier(lexer, "")
+      #(lexer, token.RegularExpression(contents: lexed, flags:))
+    }
     "[" <> source -> lex_regex(advance(lexer, source), lexed <> "[", True)
     "]" <> source -> lex_regex(advance(lexer, source), lexed <> "]", False)
     "\n" <> _source
@@ -1021,7 +1022,7 @@ fn update_mode_with_token(lexer: Lexer, token: Token) -> Lexer {
     | token.Number(_)
     | token.BigInt(_)
     | token.String(..)
-    | token.RegularExpression(_)
+    | token.RegularExpression(..)
     | token.TemplateTail(_) -> TreatSlashAsDivision
 
     // These keywords act as values, so we look for division after them

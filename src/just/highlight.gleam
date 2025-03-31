@@ -210,8 +210,8 @@ fn do_to_tokens(in: List(t.Token), out: List(Token)) -> List(Token) {
     [t.BigInt(value), ..in] -> do_to_tokens(in, [Number(value <> "n"), ..out])
     [t.String(quote:, contents:), ..in] ->
       do_to_tokens(in, [String(quote <> contents <> quote), ..out])
-    [t.RegularExpression(value), ..in] ->
-      do_to_tokens(in, [Regexp("/" <> value <> "/"), ..out])
+    [t.RegularExpression(contents:, flags:), ..in] ->
+      do_to_tokens(in, [Regexp("/" <> contents <> "/" <> flags), ..out])
     [t.TemplateHead(value), ..in] ->
       do_to_tokens(in, [String("`" <> value <> "${"), ..out])
     [t.TemplateMiddle(value), ..in] ->

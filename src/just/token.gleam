@@ -13,7 +13,7 @@ pub type Token {
   Number(String)
   BigInt(String)
   String(quote: String, contents: String)
-  RegularExpression(String)
+  RegularExpression(contents: String, flags: String)
   TemplateHead(String)
   TemplateMiddle(String)
   TemplateTail(String)
@@ -194,7 +194,7 @@ pub fn to_source(token: Token) -> String {
     Number(value) -> value
     BigInt(value) -> value <> "n"
     String(quote:, contents:) -> quote <> contents <> quote
-    RegularExpression(value) -> "/" <> value <> "/"
+    RegularExpression(contents:, flags:) -> "/" <> contents <> "/" <> flags
     TemplateHead(value) -> "`" <> value <> "${"
     TemplateMiddle(value) -> "}" <> value <> "${"
     TemplateTail(value) -> "}" <> value <> "`"
