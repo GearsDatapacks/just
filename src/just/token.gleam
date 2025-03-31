@@ -141,6 +141,13 @@ pub type Token {
   DoubleAmpersandEqual
   DoublePipeEqual
   DoubleQuestionEqual
+
+  // Invalid tokens
+  Unknown(String)
+  UnterminatedString(quote: String, contents: String)
+  UnterminatedTemplate(String)
+  UnterminatedRegularExpression(String)
+  UnterminatedComment(String)
 }
 
 pub type ContextualKeyword {
@@ -315,5 +322,11 @@ pub fn to_source(token: Token) -> String {
     DoubleAmpersandEqual -> "&&="
     DoublePipeEqual -> "||="
     DoubleQuestionEqual -> "??="
+
+    Unknown(value) -> value
+    UnterminatedComment(value) -> "/*" <> value
+    UnterminatedRegularExpression(value) -> "/" <> value
+    UnterminatedString(quote:, contents:) -> quote <> contents
+    UnterminatedTemplate(value) -> value
   }
 }

@@ -9,12 +9,21 @@ pub opaque type Lexer {
     ignore_whitespace: Bool,
     strict_mode: Bool,
     mode: LexerMode,
+    errors: List(Error),
   )
 }
 
 type LexerMode {
   TreatSlashAsRegex
   TreatSlashAsDivision
+}
+
+pub type Error {
+  UnknownCharacter(character: String)
+  UnterminatedString
+  UnterminatedComment
+  UnterminatedRegularExpression
+  UnterminatedTemplate
 }
 
 pub fn new(source: String) -> Lexer {
@@ -24,6 +33,7 @@ pub fn new(source: String) -> Lexer {
     ignore_whitespace: False,
     strict_mode: False,
     mode: TreatSlashAsRegex,
+    errors: [],
   )
 }
 
@@ -39,44 +49,9 @@ pub fn strict_mode(lexer: Lexer) -> Lexer {
   Lexer(..lexer, strict_mode: True)
 }
 
-pub fn tokenise(lexer: Lexer) -> List(Token) {
+pub fn tokenise(lexer: Lexer) -> #(List(Token), List(Error)) {
   let #(lexer, tokens) = maybe_lex_hashbang_comment(lexer)
   do_tokenise(lexer, tokens)
-}
-
-fn update_mode_with_token(lexer: Lexer, token: Token) -> Lexer {
-  let mode = case token {
-    // Comments and whitespace don't affect lexing mode
-    token.SingleLineComment(_)
-    | token.MultiLineComment(_)
-    | token.HashBangComment(_)
-    | token.Whitespace(_)
-    | token.LineTerminator(_)
-    | token.EndOfFile -> lexer.mode
-
-    // Values make us look for division
-    token.Identifier(_)
-    | token.PrivateIdentifier(_)
-    | token.Number(_)
-    | token.BigInt(_)
-    | token.String(..)
-    | token.RegularExpression(_)
-    | token.TemplateTail(_) -> TreatSlashAsDivision
-
-    // These keywords act as values, so we look for division after them
-    token.False | token.Null | token.This | token.True -> TreatSlashAsDivision
-
-    // After a grouping we look for division
-    token.RightParen | token.RightSquare -> TreatSlashAsDivision
-
-    // These can be either postfix or prefix. Either way, we keep the lexing mode the same.
-    token.DoublePlus | token.DoubleMinus -> lexer.mode
-
-    // In any other case, we look for a regular expression next.
-    _ -> TreatSlashAsRegex
-  }
-
-  Lexer(..lexer, mode:)
 }
 
 fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
@@ -96,9 +71,12 @@ fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
   }
 }
 
-fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
+fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> #(List(Token), List(Error)) {
   case next(lexer) {
-    #(_, token.EndOfFile) -> list.reverse([token.EndOfFile, ..tokens])
+    #(lexer, token.EndOfFile) -> #(
+      list.reverse([token.EndOfFile, ..tokens]),
+      list.reverse(lexer.errors),
+    )
     #(lexer, token.TemplateHead(_) as token) -> {
       let #(lexer, tokens) =
         lex_template_parts(
@@ -110,6 +88,13 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> List(Token) {
     }
     #(lexer, token) ->
       do_tokenise(update_mode_with_token(lexer, token), [token, ..tokens])
+  }
+}
+
+fn maybe_token(lexer: Lexer, token: Token, condition: Bool) -> #(Lexer, Token) {
+  case condition {
+    True -> #(lexer, token)
+    False -> next(lexer)
   }
 }
 
@@ -143,28 +128,22 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
     "\u{000A}" as space <> source
     | "\u{000D}" as space <> source
     | "\u{2028}" as space <> source
-    | "\u{2029}" as space <> source -> {
-      let lexer = advance(lexer, source)
-      case lexer.ignore_whitespace {
-        True -> next(lexer)
-        False -> #(lexer, token.LineTerminator(space))
-      }
-    }
+    | "\u{2029}" as space <> source ->
+      maybe_token(
+        advance(lexer, source),
+        token.LineTerminator(space),
+        !lexer.ignore_whitespace,
+      )
 
     "//" <> source -> {
       let #(lexer, contents) = lex_until_end_of_line(advance(lexer, source), "")
-      case lexer.ignore_comments {
-        True -> next(lexer)
-        False -> #(lexer, token.SingleLineComment(contents))
-      }
+      maybe_token(
+        lexer,
+        token.SingleLineComment(contents),
+        !lexer.ignore_comments,
+      )
     }
-    "/*" <> source -> {
-      let #(lexer, contents) = lex_multiline_comment(advance(lexer, source), "")
-      case lexer.ignore_comments {
-        True -> next(lexer)
-        False -> #(lexer, token.MultiLineComment(contents))
-      }
-    }
+    "/*" <> source -> lex_multiline_comment(advance(lexer, source), "")
 
     "0b" as prefix <> source ->
       lex_radix_number(advance(lexer, source), 2, prefix, False)
@@ -209,10 +188,8 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
     | ".0" as digit <> source ->
       lex_number(advance(lexer, source), digit, Decimal, AfterNumber)
 
-    "/" <> source if lexer.mode == TreatSlashAsRegex -> {
-      let #(lexer, value) = lex_regex(advance(lexer, source), "", False)
-      #(lexer, token.RegularExpression(value))
-    }
+    "/" <> source if lexer.mode == TreatSlashAsRegex ->
+      lex_regex(advance(lexer, source), "", False)
 
     "{" <> source -> #(advance(lexer, source), token.LeftBrace)
     "}" <> source -> #(advance(lexer, source), token.RightBrace)
@@ -344,23 +321,38 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
       #(lexer, token)
     }
 
-    "'" as quote <> source | "\"" as quote <> source -> {
-      let #(lexer, string) = lex_string(advance(lexer, source), quote, "")
-      #(lexer, token.String(quote, string))
-    }
+    "'" as quote <> source | "\"" as quote <> source ->
+      lex_string(advance(lexer, source), quote, "")
 
     "`" <> source -> lex_template_head(advance(lexer, source), "")
 
-    _ -> #(lexer, token.EndOfFile)
+    _ ->
+      case string.pop_grapheme(lexer.source) {
+        Error(_) -> #(lexer, token.EndOfFile)
+        Ok(#(character, source)) -> #(
+          lexer |> advance(source) |> error(UnknownCharacter(character)),
+          token.Unknown(character),
+        )
+      }
   }
 }
 
-fn lex_multiline_comment(lexer: Lexer, lexed: String) -> #(Lexer, String) {
+fn lex_multiline_comment(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
   case lexer.source {
-    "*/" <> source -> #(advance(lexer, source), lexed)
+    "*/" <> source ->
+      maybe_token(
+        advance(lexer, source),
+        token.MultiLineComment(lexed),
+        !lexer.ignore_comments,
+      )
     _ ->
       case string.pop_grapheme(lexer.source) {
-        Error(_) -> #(lexer, lexed)
+        Error(_) ->
+          maybe_token(
+            error(lexer, UnterminatedComment),
+            token.MultiLineComment(lexed),
+            !lexer.ignore_comments,
+          )
         Ok(#(char, source)) ->
           lex_multiline_comment(advance(lexer, source), lexed <> char)
       }
@@ -574,16 +566,27 @@ fn lex_radix_number(
   }
 }
 
-fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, String) {
+fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, Token) {
   case string.pop_grapheme(lexer.source) {
-    Error(_) -> #(lexer, contents)
+    Error(_) -> #(
+      error(lexer, UnterminatedString),
+      token.UnterminatedString(quote:, contents:),
+    )
+    Ok(#("\n", _source)) | Ok(#("\r", _source)) -> #(
+      error(lexer, UnterminatedString),
+      token.UnterminatedString(quote:, contents:),
+    )
+
     Ok(#(character, source)) if character == quote -> #(
       advance(lexer, source),
-      contents,
+      token.String(quote:, contents:),
     )
     Ok(#("\\", source)) ->
       case string.pop_grapheme(source) {
-        Error(_) -> #(lexer, contents)
+        Error(_) -> #(
+          error(lexer, UnterminatedString),
+          token.UnterminatedString(quote:, contents:),
+        )
         Ok(#(character, source)) ->
           lex_string(
             advance(lexer, source),
@@ -602,13 +605,19 @@ fn lex_template_head(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
     "`" <> source -> #(advance(lexer, source), token.String("`", lexed))
     "\\" <> source ->
       case string.pop_grapheme(source) {
-        Error(_) -> #(lexer, token.String("`", lexed))
+        Error(_) -> #(
+          error(lexer, UnterminatedString),
+          token.UnterminatedString("`", lexed),
+        )
         Ok(#(character, source)) ->
           lex_template_head(advance(lexer, source), lexed <> "\\" <> character)
       }
     _ ->
       case string.pop_grapheme(lexer.source) {
-        Error(_) -> #(lexer, token.String("`", lexed))
+        Error(_) -> #(
+          error(lexer, UnterminatedString),
+          token.UnterminatedString("`", lexed),
+        )
         Ok(#(character, source)) ->
           lex_template_head(advance(lexer, source), lexed <> character)
       }
@@ -643,7 +652,10 @@ fn lex_template_parts(
         }
         "\\" <> source ->
           case string.pop_grapheme(source) {
-            Error(_) -> #(lexer, [token.TemplateTail(lexed), ..tokens])
+            Error(_) -> #(error(lexer, UnterminatedTemplate), [
+              token.UnterminatedTemplate(lexed),
+              ..tokens
+            ])
             Ok(#(character, source)) ->
               lex_template_parts(
                 advance(lexer, source),
@@ -653,7 +665,10 @@ fn lex_template_parts(
           }
         _ ->
           case string.pop_grapheme(lexer.source) {
-            Error(_) -> #(lexer, [token.TemplateTail(lexed), ..tokens])
+            Error(_) -> #(error(lexer, UnterminatedTemplate), [
+              token.UnterminatedTemplate(lexed),
+              ..tokens
+            ])
             Ok(#(character, source)) ->
               lex_template_parts(
                 advance(lexer, source),
@@ -690,14 +705,27 @@ fn lex_template_parts(
   }
 }
 
-fn lex_regex(lexer: Lexer, lexed: String, in_group: Bool) -> #(Lexer, String) {
+fn lex_regex(lexer: Lexer, lexed: String, in_group: Bool) -> #(Lexer, Token) {
   case lexer.source {
-    "/" <> source if !in_group -> #(advance(lexer, source), lexed)
+    "/" <> source if !in_group -> #(
+      advance(lexer, source),
+      token.RegularExpression(lexed),
+    )
     "[" <> source -> lex_regex(advance(lexer, source), lexed <> "[", True)
     "]" <> source -> lex_regex(advance(lexer, source), lexed <> "]", False)
+    "\n" <> _source
+    | "\r" <> _source
+    | "\u{2028}" <> _source
+    | "\u{2029}" <> _source -> #(
+      error(lexer, UnterminatedRegularExpression),
+      token.UnterminatedRegularExpression(lexed),
+    )
     "\\" <> source ->
       case string.pop_grapheme(source) {
-        Error(_) -> #(lexer, lexed)
+        Error(_) -> #(
+          error(lexer, UnterminatedRegularExpression),
+          token.UnterminatedRegularExpression(lexed),
+        )
         Ok(#(character, source)) ->
           lex_regex(
             advance(lexer, source),
@@ -707,7 +735,10 @@ fn lex_regex(lexer: Lexer, lexed: String, in_group: Bool) -> #(Lexer, String) {
       }
     _ ->
       case string.pop_grapheme(lexer.source) {
-        Error(_) -> #(lexer, lexed)
+        Error(_) -> #(
+          error(lexer, UnterminatedRegularExpression),
+          token.UnterminatedRegularExpression(lexed),
+        )
         Ok(#(character, source)) ->
           lex_regex(advance(lexer, source), lexed <> character, in_group)
       }
@@ -835,4 +866,43 @@ fn lex_until_end_of_line(lexer: Lexer, lexed: String) -> #(Lexer, String) {
 
 fn advance(lexer: Lexer, source: String) -> Lexer {
   Lexer(..lexer, source:)
+}
+
+fn update_mode_with_token(lexer: Lexer, token: Token) -> Lexer {
+  let mode = case token {
+    // Comments and whitespace don't affect lexing mode
+    token.SingleLineComment(_)
+    | token.MultiLineComment(_)
+    | token.HashBangComment(_)
+    | token.Whitespace(_)
+    | token.LineTerminator(_)
+    | token.EndOfFile -> lexer.mode
+
+    // Values make us look for division
+    token.Identifier(_)
+    | token.PrivateIdentifier(_)
+    | token.Number(_)
+    | token.BigInt(_)
+    | token.String(..)
+    | token.RegularExpression(_)
+    | token.TemplateTail(_) -> TreatSlashAsDivision
+
+    // These keywords act as values, so we look for division after them
+    token.False | token.Null | token.This | token.True -> TreatSlashAsDivision
+
+    // After a grouping we look for division
+    token.RightParen | token.RightSquare -> TreatSlashAsDivision
+
+    // These can be either postfix or prefix. Either way, we keep the lexing mode the same.
+    token.DoublePlus | token.DoubleMinus -> lexer.mode
+
+    // In any other case, we look for a regular expression next.
+    _ -> TreatSlashAsRegex
+  }
+
+  Lexer(..lexer, mode:)
+}
+
+fn error(lexer: Lexer, error: Error) -> Lexer {
+  Lexer(..lexer, errors: [error, ..lexer.errors])
 }

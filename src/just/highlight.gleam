@@ -22,6 +22,7 @@ pub type Token {
   Operator(String)
   Comment(String)
   Punctuation(String)
+  Other(String)
 }
 
 /// Convert a string of JavaScript source code into ansi highlighting.
@@ -55,6 +56,7 @@ pub fn to_ansi(code: String) -> String {
       Operator(s) -> ansi.magenta(s)
       Comment(s) -> ansi.italic(ansi.gray(s))
       Punctuation(s) -> ansi.reset(s)
+      Other(s) -> ansi.reset(s)
     }
   })
 }
@@ -119,6 +121,7 @@ pub fn to_html(code: String) -> String {
         acc <> "<span class=hl-comment>" <> houdini.escape(s) <> "</span>"
       Punctuation(s) ->
         acc <> "<span class=hl-punctuation>" <> houdini.escape(s) <> "</span>"
+      Other(s) -> acc <> s
     }
   })
 }
@@ -131,7 +134,8 @@ pub fn to_html(code: String) -> String {
 /// 
 pub fn to_tokens(code: String) -> List(Token) {
   let lexer = just.new(code)
-  do_to_tokens(just.tokenise(lexer), [])
+  let #(tokens, _errors) = just.tokenise(lexer)
+  do_to_tokens(tokens, [])
 }
 
 fn do_to_tokens(in: List(t.Token), out: List(Token)) -> List(Token) {
@@ -335,5 +339,15 @@ fn do_to_tokens(in: List(t.Token), out: List(Token)) -> List(Token) {
     [t.DoubleAmpersandEqual, ..in] -> do_to_tokens(in, [Operator("&&="), ..out])
     [t.DoublePipeEqual, ..in] -> do_to_tokens(in, [Operator("||="), ..out])
     [t.DoubleQuestionEqual, ..in] -> do_to_tokens(in, [Operator("??="), ..out])
+
+    [t.Unknown(value), ..] -> do_to_tokens(in, [Other(value), ..out])
+    [t.UnterminatedComment(value), ..] ->
+      do_to_tokens(in, [Comment("/*" <> value), ..out])
+    [t.UnterminatedRegularExpression(value), ..] ->
+      do_to_tokens(in, [Regexp("/" <> value), ..out])
+    [t.UnterminatedString(quote:, contents:), ..] ->
+      do_to_tokens(in, [String(quote <> contents), ..out])
+    [t.UnterminatedTemplate(contents), ..] ->
+      do_to_tokens(in, [String(contents), ..out])
   }
 }
