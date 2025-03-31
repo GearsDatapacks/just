@@ -28,6 +28,7 @@ pub type Error {
   NumericSeparatorNotAllowed
   ExpectedExponent
   InvalidPrivateIdentifier(identifier: String)
+  ZeroPrefixedNumberInStrictMode
 }
 
 pub fn stringify_error(error: Error) -> String {
@@ -43,6 +44,8 @@ pub fn stringify_error(error: Error) -> String {
     UnterminatedRegularExpression -> "Unterminated regular expression literal"
     UnterminatedString -> "Unterminated strint literal"
     UnterminatedTemplate -> "Unterminated template literal"
+    ZeroPrefixedNumberInStrictMode ->
+      "Zero-prefixed numbers are not allowed in strict mode"
   }
 }
 
@@ -182,7 +185,10 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
     | "05" as digit <> source
     | "06" as digit <> source
     | "07" as digit <> source ->
-      lex_leading_zero_number(advance(lexer, source), digit)
+      lex_leading_zero_number(advance(lexer, source), digit, False)
+
+    "08" as digit <> source | "09" as digit <> source ->
+      lex_leading_zero_number(advance(lexer, source), digit, True)
 
     "1" as digit <> source
     | "2" as digit <> source
@@ -533,7 +539,11 @@ fn lex_number(
   }
 }
 
-fn lex_leading_zero_number(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
+fn lex_leading_zero_number(
+  lexer: Lexer,
+  lexed: String,
+  allow_decimal_digits: Bool,
+) -> #(Lexer, Token) {
   case lexer.source {
     "0" as digit <> source
     | "1" as digit <> source
@@ -543,9 +553,27 @@ fn lex_leading_zero_number(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
     | "5" as digit <> source
     | "6" as digit <> source
     | "7" as digit <> source ->
-      lex_leading_zero_number(advance(lexer, source), lexed <> digit)
+      lex_leading_zero_number(
+        advance(lexer, source),
+        lexed <> digit,
+        allow_decimal_digits,
+      )
 
-    _ -> #(lexer, token.Number(lexed))
+    "8" as digit <> source | "9" as digit <> source if allow_decimal_digits ->
+      lex_leading_zero_number(
+        advance(lexer, source),
+        lexed <> digit,
+        allow_decimal_digits,
+      )
+
+    _ -> {
+      let lexer = ensure_no_letters_after_numbers(lexer)
+      let lexer = case lexer.strict_mode {
+        False -> lexer
+        True -> error(lexer, ZeroPrefixedNumberInStrictMode)
+      }
+      #(lexer, token.Number(lexed))
+    }
   }
 }
 
