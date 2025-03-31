@@ -820,10 +820,10 @@ fn whitespace(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
 
 fn lex_until_end_of_line(lexer: Lexer, lexed: String) -> #(Lexer, String) {
   case lexer.source {
-    "\n" <> source
-    | "\r" <> source
-    | "\u{2028}" <> source
-    | "\u{2029}" <> source -> #(advance(lexer, source), lexed)
+    "\n" <> _source
+    | "\r" <> _source
+    | "\u{2028}" <> _source
+    | "\u{2029}" <> _source -> #(lexer, lexed)
     _ ->
       case string.pop_grapheme(lexer.source) {
         Error(_) -> #(lexer, lexed)
