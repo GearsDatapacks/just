@@ -168,13 +168,13 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
     }
     "/*" <> source -> lex_multiline_comment(advance(lexer, source), "")
 
-    "0b" as prefix <> source ->
+    "0b" as prefix <> source | "0B" as prefix <> source ->
       lex_radix_number(advance(lexer, source), 2, prefix, False)
 
-    "0o" as prefix <> source ->
+    "0o" as prefix <> source | "0O" as prefix <> source ->
       lex_radix_number(advance(lexer, source), 8, prefix, False)
 
-    "0x" as prefix <> source ->
+    "0x" as prefix <> source | "0X" as prefix <> source ->
       lex_radix_number(advance(lexer, source), 16, prefix, False)
 
     "00" as digit <> source
@@ -506,11 +506,21 @@ fn lex_number(
     "." <> source, Initial, AfterNumber ->
       lex_number(advance(lexer, source), lexed <> ".", Decimal, AfterDecimal)
 
-    "e-" <> source, Initial, AfterNumber | "e-" <> source, Decimal, AfterNumber ->
-      lex_number(advance(lexer, source), lexed <> "e-", Exponent, AfterExponent)
-
-    "e" <> source, Initial, AfterNumber | "e" <> source, Decimal, AfterNumber ->
-      lex_number(advance(lexer, source), lexed <> "e", Exponent, AfterExponent)
+    "e-" as prefix <> source, Initial, AfterNumber
+    | "e-" as prefix <> source, Decimal, AfterNumber
+    | "e" as prefix <> source, Initial, AfterNumber
+    | "e" as prefix <> source, Decimal, AfterNumber
+    | "E-" as prefix <> source, Initial, AfterNumber
+    | "E-" as prefix <> source, Decimal, AfterNumber
+    | "E" as prefix <> source, Initial, AfterNumber
+    | "E" as prefix <> source, Decimal, AfterNumber
+    ->
+      lex_number(
+        advance(lexer, source),
+        lexed <> prefix,
+        Exponent,
+        AfterExponent,
+      )
 
     "_" <> source, _, AfterNumber ->
       lex_number(advance(lexer, source), lexed <> "_", mode, AfterSeparator)
