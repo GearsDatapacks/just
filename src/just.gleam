@@ -614,14 +614,18 @@ fn lex_radix_number(
     -> lex_radix_number(advance(lexer, source), radix, lexed <> digit, True)
 
     "n" <> source if valid_delimiter -> #(
-      advance(lexer, source),
+      ensure_no_letters_after_numbers(advance(lexer, source)),
       token.BigInt(lexed),
     )
 
     "_" <> source if valid_delimiter ->
       lex_radix_number(advance(lexer, source), radix, lexed <> "_", False)
 
-    _ -> #(lexer, token.Number(lexed))
+    _ if !valid_delimiter -> #(
+      error(lexer, NumericSeparatorNotAllowed),
+      token.Number(lexed),
+    )
+    _ -> #(ensure_no_letters_after_numbers(lexer), token.Number(lexed))
   }
 }
 
