@@ -77,6 +77,10 @@ pub fn tokenise(lexer: Lexer) -> #(List(Token), List(Error)) {
   do_tokenise(lexer, tokens)
 }
 
+pub fn to_source(tokens: List(Token)) -> String {
+  list.fold(tokens, "", fn(code, token) { code <> token.to_source(token) })
+}
+
 fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
   case lexer.source {
     "#!" <> source -> {
