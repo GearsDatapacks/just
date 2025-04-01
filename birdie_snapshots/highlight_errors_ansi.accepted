@@ -1,0 +1,23 @@
+---
+version: 1.2.6
+title: highlight_errors_ansi
+---
+
+let unknown = @;
+let ustring = 'This string does not finish
+let uregex = /uh oh
+let badNumber = 0xabcdefg;
+/*
+This comment spans the rest of the program.
+
+
+---
+
+[0m
+[0m[33mlet[39m[0m [0m[0munknown[0m[0m [0m[35m=[39m[0m [0m[0m@[0m[0m;[0m[0m
+[0m[33mlet[39m[0m [0m[0mustring[0m[0m [0m[35m=[39m[0m [0m[32m'This string does not finish[39m[0m
+[0m[33mlet[39m[0m [0m[0muregex[0m[0m [0m[35m=[39m[0m [0m[32m/uh oh[39m[0m
+[0m[33mlet[39m[0m [0m[0mbadNumber[0m[0m [0m[35m=[39m[0m [0m[32m0xabcdef[39m[0mg[0m[0m;[0m[0m
+[0m[3m[90m/*
+This comment spans the rest of the program.
+[39m[23m

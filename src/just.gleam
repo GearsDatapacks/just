@@ -396,7 +396,7 @@ fn lex_multiline_comment(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
         Error(_) ->
           maybe_token(
             error(lexer, UnterminatedComment),
-            token.MultiLineComment(lexed),
+            token.UnterminatedComment(lexed),
             !lexer.ignore_comments,
           )
         Ok(#(char, source)) ->

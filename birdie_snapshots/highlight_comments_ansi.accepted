@@ -1,0 +1,25 @@
+---
+version: 1.2.6
+title: highlight_comments_ansi
+---
+#! shebang!
+// This is some kind of comment
+console.log("Hi");
+/*
+Another comment
+that spans several lines
+*/
+let x = /* this on is inline! */ 10;
+
+
+---
+
+[3m[90m#! shebang![39m[23m[0m
+[0m[3m[90m// This is some kind of comment[39m[23m[0m
+[0m[0mconsole[0m[0m.[0m[34mlog[39m[0m([0m[32m"Hi"[39m[0m)[0m[0m;[0m[0m
+[0m[3m[90m/*
+Another comment
+that spans several lines
+*/[39m[23m[0m
+[0m[33mlet[39m[0m [0m[0mx[0m[0m [0m[35m=[39m[0m [0m[3m[90m/* this on is inline! */[39m[23m[0m [0m[32m10[39m[0m;[0m[0m
+[0m

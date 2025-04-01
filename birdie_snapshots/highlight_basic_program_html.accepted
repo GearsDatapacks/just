@@ -1,0 +1,22 @@
+---
+version: 1.2.6
+title: highlight_basic_program_html
+---
+
+export function main() {
+  const message = 'Hello, world!';
+  console.log(message);
+}
+
+main();
+
+
+---
+
+
+<span class=hl-keyword>export</span> <span class=hl-keyword>function</span> <span class=hl-function>main</span><span class=hl-punctuation>(</span><span class=hl-punctuation>)</span> <span class=hl-punctuation>{</span>
+  <span class=hl-keyword>const</span> <span class=hl-variable>message</span> <span class=hl-operator>=</span> <span class=hl-string>&#39;Hello, world!&#39;</span><span class=hl-punctuation>;</span>
+  <span class=hl-variable>console</span><span class=hl-punctuation>.</span><span class=hl-function>log</span><span class=hl-punctuation>(</span><span class=hl-variable>message</span><span class=hl-punctuation>)</span><span class=hl-punctuation>;</span>
+<span class=hl-punctuation>}</span>
+
+<span class=hl-function>main</span><span class=hl-punctuation>(</span><span class=hl-punctuation>)</span><span class=hl-punctuation>;</span>

@@ -1,0 +1,23 @@
+---
+version: 1.2.6
+title: highlight_basic_program_ansi
+---
+
+export function main() {
+  const message = 'Hello, world!';
+  console.log(message);
+}
+
+main();
+
+
+---
+
+[0m
+[0m[33mexport[39m[0m [0m[33mfunction[39m[0m [0m[34mmain[39m[0m([0m[0m)[0m[0m [0m[0m{[0m[0m
+[0m[0m  [0m[33mconst[39m[0m [0m[0mmessage[0m[0m [0m[35m=[39m[0m [0m[32m'Hello, world!'[39m[0m;[0m[0m
+[0m[0m  [0m[0mconsole[0m[0m.[0m[34mlog[39m[0m([0m[0mmessage[0m[0m)[0m[0m;[0m[0m
+[0m[0m}[0m[0m
+[0m[0m
+[0m[34mmain[39m[0m([0m[0m)[0m[0m;[0m[0m
+[0m

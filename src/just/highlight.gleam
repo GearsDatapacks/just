@@ -40,8 +40,8 @@ pub type Token {
 ///
 /// If you wish to use other colours or another format, use `to_tokens`.
 /// 
-pub fn to_ansi(code: String) -> String {
-  to_tokens(code)
+pub fn ansi(code: String) -> String {
+  tokens(code)
   |> list.fold("", fn(code, token) {
     code
     <> case token {
@@ -96,8 +96,8 @@ pub fn to_ansi(code: String) -> String {
 ///
 /// If you wish to use another format see `to_ansi` or `to_tokens`.
 ///
-pub fn to_html(code: String) -> String {
-  to_tokens(code)
+pub fn html(code: String) -> String {
+  tokens(code)
   |> list.fold("", fn(acc, token) {
     case token {
       Whitespace(s) -> acc <> s
@@ -132,7 +132,7 @@ pub fn to_html(code: String) -> String {
 /// 
 /// To convert code into syntax tokens, see `just.tokenise`.
 /// 
-pub fn to_tokens(code: String) -> List(Token) {
+pub fn tokens(code: String) -> List(Token) {
   let lexer = just.new(code)
   let #(tokens, _errors) = just.tokenise(lexer)
   do_to_tokens(tokens, [])
@@ -340,14 +340,14 @@ fn do_to_tokens(in: List(t.Token), out: List(Token)) -> List(Token) {
     [t.DoublePipeEqual, ..in] -> do_to_tokens(in, [Operator("||="), ..out])
     [t.DoubleQuestionEqual, ..in] -> do_to_tokens(in, [Operator("??="), ..out])
 
-    [t.Unknown(value), ..] -> do_to_tokens(in, [Other(value), ..out])
-    [t.UnterminatedComment(value), ..] ->
+    [t.Unknown(value), ..in] -> do_to_tokens(in, [Other(value), ..out])
+    [t.UnterminatedComment(value), ..in] ->
       do_to_tokens(in, [Comment("/*" <> value), ..out])
-    [t.UnterminatedRegularExpression(value), ..] ->
+    [t.UnterminatedRegularExpression(value), ..in] ->
       do_to_tokens(in, [Regexp("/" <> value), ..out])
-    [t.UnterminatedString(quote:, contents:), ..] ->
+    [t.UnterminatedString(quote:, contents:), ..in] ->
       do_to_tokens(in, [String(quote <> contents), ..out])
-    [t.UnterminatedTemplate(contents), ..] ->
+    [t.UnterminatedTemplate(contents), ..in] ->
       do_to_tokens(in, [String(contents), ..out])
   }
 }
