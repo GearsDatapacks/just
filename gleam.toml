@@ -16,3 +16,7 @@ splitter = ">= 1.0.0 and < 2.0.0"
 gleeunit = ">= 1.0.0 and < 2.0.0"
 simplifile = ">= 2.2.1 and < 3.0.0"
 birdie = ">= 1.2.6 and < 2.0.0"
+
+[javascript.deno]
+allow_read = ["gleam.toml", "test", "build", "birdie_snapshots"]
+allow_write = ["birdie_snapshots"]
