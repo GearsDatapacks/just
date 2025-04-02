@@ -1,6 +1,7 @@
 import gleam/list
 import gleam/string
 import just/token.{type Token}
+import splitter.{type Splitter}
 
 pub opaque type Lexer {
   Lexer(
@@ -10,6 +11,18 @@ pub opaque type Lexer {
     strict_mode: Bool,
     mode: LexerMode,
     errors: List(Error),
+    splitters: Splitters,
+  )
+}
+
+type Splitters {
+  Splitters(
+    string: Splitter,
+    multiline_comment: Splitter,
+    template: Splitter,
+    until_end_of_line: Splitter,
+    regex_in_group: Splitter,
+    regex_regular: Splitter,
   )
 }
 
@@ -57,6 +70,20 @@ pub fn new(source: String) -> Lexer {
     strict_mode: False,
     mode: TreatSlashAsRegex,
     errors: [],
+    splitters: make_splitters(),
+  )
+}
+
+fn make_splitters() -> Splitters {
+  Splitters(
+    string: splitter.new(["\"", "'", "\\", "\n", "\r"]),
+    multiline_comment: splitter.new(["*/"]),
+    template: splitter.new(["`", "${", "\\"]),
+    until_end_of_line: splitter.new(["\n", "\r", "\u{2028}", "\u{2029}"]),
+    regex_regular: splitter.new([
+      "/", "[", "]", "\n", "\r", "\u{2028}", "\u{2029}", "\\",
+    ]),
+    regex_in_group: splitter.new(["]", "\n", "\r", "\u{2028}", "\u{2029}", "\\"]),
   )
 }
 
@@ -87,7 +114,7 @@ fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
       let #(lexer, contents) =
         lexer
         |> advance(source)
-        |> lex_until_end_of_line("")
+        |> lex_until_end_of_line
 
       #(lexer, case lexer.ignore_comments {
         True -> []
@@ -163,14 +190,14 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
       )
 
     "//" <> source -> {
-      let #(lexer, contents) = lex_until_end_of_line(advance(lexer, source), "")
+      let #(lexer, contents) = lex_until_end_of_line(advance(lexer, source))
       maybe_token(
         lexer,
         token.SingleLineComment(contents),
         !lexer.ignore_comments,
       )
     }
-    "/*" <> source -> lex_multiline_comment(advance(lexer, source), "")
+    "/*" <> source -> lex_multiline_comment(advance(lexer, source))
 
     "0b" as prefix <> source | "0B" as prefix <> source ->
       lex_radix_number(advance(lexer, source), 2, prefix, False)
@@ -383,25 +410,20 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
   }
 }
 
-fn lex_multiline_comment(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
-  case lexer.source {
-    "*/" <> source ->
+fn lex_multiline_comment(lexer: Lexer) -> #(Lexer, Token) {
+  case splitter.split(lexer.splitters.multiline_comment, lexer.source) {
+    #(before, "", "") ->
       maybe_token(
-        advance(lexer, source),
-        token.MultiLineComment(lexed),
+        error(advance(lexer, ""), UnterminatedComment),
+        token.UnterminatedComment(before),
         !lexer.ignore_comments,
       )
-    _ ->
-      case string.pop_grapheme(lexer.source) {
-        Error(_) ->
-          maybe_token(
-            error(lexer, UnterminatedComment),
-            token.UnterminatedComment(lexed),
-            !lexer.ignore_comments,
-          )
-        Ok(#(char, source)) ->
-          lex_multiline_comment(advance(lexer, source), lexed <> char)
-      }
+    #(before, _, after) ->
+      maybe_token(
+        advance(lexer, after),
+        token.MultiLineComment(before),
+        !lexer.ignore_comments,
+      )
   }
 }
 
@@ -704,60 +726,68 @@ fn ensure_no_letters_after_numbers(lexer: Lexer) -> Lexer {
 }
 
 fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, Token) {
-  case string.pop_grapheme(lexer.source) {
-    Error(_) -> #(
-      error(lexer, UnterminatedString),
-      token.UnterminatedString(quote:, contents:),
-    )
-    Ok(#("\n", _source)) | Ok(#("\r", _source)) -> #(
-      error(lexer, UnterminatedString),
-      token.UnterminatedString(quote:, contents:),
+  let #(before, split, after) =
+    splitter.split(lexer.splitters.string, lexer.source)
+  case split {
+    "" -> #(
+      error(advance(lexer, after), UnterminatedString),
+      token.UnterminatedString(quote:, contents: contents <> before),
     )
 
-    Ok(#(character, source)) if character == quote -> #(
-      advance(lexer, source),
-      token.String(quote:, contents:),
+    "\r" | "\n" -> #(
+      error(advance(lexer, split <> after), UnterminatedString),
+      token.UnterminatedString(quote:, contents: contents <> before),
     )
-    Ok(#("\\", source)) ->
-      case string.pop_grapheme(source) {
+
+    "\\" ->
+      case string.pop_grapheme(after) {
         Error(_) -> #(
-          error(lexer, UnterminatedString),
+          error(advance(lexer, after), UnterminatedString),
           token.UnterminatedString(quote:, contents:),
         )
         Ok(#(character, source)) ->
           lex_string(
             advance(lexer, source),
             quote,
-            contents <> "\\" <> character,
+            contents <> before <> "\\" <> character,
           )
       }
-    Ok(#(character, source)) ->
-      lex_string(advance(lexer, source), quote, contents <> character)
+
+    _ if split == quote -> #(
+      advance(lexer, after),
+      token.String(quote:, contents: contents <> before),
+    )
+
+    // Here, we've split on a quote which doesn't match the current string.
+    // In this case, we must continue lexing until we find a quote of the
+    // correct kind.
+    _ -> lex_string(advance(lexer, after), quote, contents <> before <> split)
   }
 }
 
 fn lex_template_head(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
-  case lexer.source {
-    "${" <> source -> #(advance(lexer, source), token.TemplateHead(lexed))
-    "`" <> source -> #(advance(lexer, source), token.String("`", lexed))
-    "\\" <> source ->
-      case string.pop_grapheme(source) {
+  let #(before, split, after) =
+    splitter.split(lexer.splitters.template, lexer.source)
+
+  case split {
+    "${" -> #(advance(lexer, after), token.TemplateHead(lexed <> before))
+    "\\" ->
+      case string.pop_grapheme(after) {
         Error(_) -> #(
-          error(lexer, UnterminatedString),
-          token.UnterminatedString("`", lexed),
+          error(advance(lexer, after), UnterminatedString),
+          token.UnterminatedString("`", lexed <> before),
         )
         Ok(#(character, source)) ->
-          lex_template_head(advance(lexer, source), lexed <> "\\" <> character)
+          lex_template_head(
+            advance(lexer, source),
+            lexed <> before <> "\\" <> character,
+          )
       }
-    _ ->
-      case string.pop_grapheme(lexer.source) {
-        Error(_) -> #(
-          error(lexer, UnterminatedString),
-          token.UnterminatedString("`", lexed),
-        )
-        Ok(#(character, source)) ->
-          lex_template_head(advance(lexer, source), lexed <> character)
-      }
+    "" -> #(
+      error(advance(lexer, after), UnterminatedString),
+      token.UnterminatedString("`", lexed <> before),
+    )
+    _ -> #(advance(lexer, after), token.String("`", lexed <> before))
   }
 }
 
@@ -772,48 +802,43 @@ fn lex_template_parts(
   mode: LexTemplateMode,
 ) -> #(Lexer, List(Token)) {
   case mode {
-    LexTemplate(lexed) ->
-      case lexer.source {
-        "`" <> source -> #(advance(lexer, source), [
-          token.TemplateTail(lexed),
-          ..tokens
-        ])
-        "${" <> source -> {
-          let lexer = advance(lexer, source)
-          let token = token.TemplateMiddle(lexed)
+    LexTemplate(lexed) -> {
+      let #(before, split, after) =
+        splitter.split(lexer.splitters.template, lexer.source)
+
+      case split {
+        "${" -> {
+          let lexer = advance(lexer, after)
+          let token = token.TemplateMiddle(lexed <> before)
           lex_template_parts(
             update_mode_with_token(lexer, token),
             [token, ..tokens],
             LexTokens(0),
           )
         }
-        "\\" <> source ->
-          case string.pop_grapheme(source) {
+        "\\" ->
+          case string.pop_grapheme(after) {
             Error(_) -> #(error(lexer, UnterminatedTemplate), [
-              token.UnterminatedTemplate(lexed),
+              token.UnterminatedTemplate(lexed <> before),
               ..tokens
             ])
             Ok(#(character, source)) ->
               lex_template_parts(
                 advance(lexer, source),
                 tokens,
-                LexTemplate(lexed <> "\\" <> character),
+                LexTemplate(lexed <> before <> "\\" <> character),
               )
           }
-        _ ->
-          case string.pop_grapheme(lexer.source) {
-            Error(_) -> #(error(lexer, UnterminatedTemplate), [
-              token.UnterminatedTemplate(lexed),
-              ..tokens
-            ])
-            Ok(#(character, source)) ->
-              lex_template_parts(
-                advance(lexer, source),
-                tokens,
-                LexTemplate(lexed <> character),
-              )
-          }
+        "" -> #(error(advance(lexer, after), UnterminatedTemplate), [
+          token.UnterminatedTemplate(lexed <> before),
+          ..tokens
+        ])
+        _ -> #(advance(lexer, after), [
+          token.TemplateTail(lexed <> before),
+          ..tokens
+        ])
       }
+    }
 
     LexTokens(bracket_level) ->
       case next(lexer) {
@@ -843,43 +868,38 @@ fn lex_template_parts(
 }
 
 fn lex_regex(lexer: Lexer, lexed: String, in_group: Bool) -> #(Lexer, Token) {
-  case lexer.source {
-    "/" <> source if !in_group -> {
-      let lexer = advance(lexer, source)
+  let splitter = case in_group {
+    False -> lexer.splitters.regex_regular
+    True -> lexer.splitters.regex_in_group
+  }
+  let #(before, split, after) = splitter.split(splitter, lexer.source)
+  case split {
+    "/" -> {
+      let lexer = advance(lexer, after)
       let #(lexer, flags) = lex_identifier(lexer, "")
-      #(lexer, token.RegularExpression(contents: lexed, flags:))
+      #(lexer, token.RegularExpression(contents: lexed <> before, flags:))
     }
-    "[" <> source -> lex_regex(advance(lexer, source), lexed <> "[", True)
-    "]" <> source -> lex_regex(advance(lexer, source), lexed <> "]", False)
-    "\n" <> _source
-    | "\r" <> _source
-    | "\u{2028}" <> _source
-    | "\u{2029}" <> _source -> #(
-      error(lexer, UnterminatedRegularExpression),
-      token.UnterminatedRegularExpression(lexed),
-    )
-    "\\" <> source ->
-      case string.pop_grapheme(source) {
+    "[" -> lex_regex(advance(lexer, after), lexed <> before <> "[", True)
+    "]" -> lex_regex(advance(lexer, after), lexed <> before <> "]", False)
+
+    "\\" ->
+      case string.pop_grapheme(after) {
         Error(_) -> #(
-          error(lexer, UnterminatedRegularExpression),
-          token.UnterminatedRegularExpression(lexed),
+          error(advance(lexer, after), UnterminatedRegularExpression),
+          token.UnterminatedRegularExpression(lexed <> before),
         )
         Ok(#(character, source)) ->
           lex_regex(
             advance(lexer, source),
-            lexed <> "\\" <> character,
+            lexed <> before <> "\\" <> character,
             in_group,
           )
       }
-    _ ->
-      case string.pop_grapheme(lexer.source) {
-        Error(_) -> #(
-          error(lexer, UnterminatedRegularExpression),
-          token.UnterminatedRegularExpression(lexed),
-        )
-        Ok(#(character, source)) ->
-          lex_regex(advance(lexer, source), lexed <> character, in_group)
-      }
+
+    _ -> #(
+      error(advance(lexer, split <> after), UnterminatedRegularExpression),
+      token.UnterminatedRegularExpression(lexed <> before),
+    )
   }
 }
 
@@ -987,19 +1007,10 @@ fn whitespace(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
   }
 }
 
-fn lex_until_end_of_line(lexer: Lexer, lexed: String) -> #(Lexer, String) {
-  case lexer.source {
-    "\n" <> _source
-    | "\r" <> _source
-    | "\u{2028}" <> _source
-    | "\u{2029}" <> _source -> #(lexer, lexed)
-    _ ->
-      case string.pop_grapheme(lexer.source) {
-        Error(_) -> #(lexer, lexed)
-        Ok(#(char, source)) ->
-          lex_until_end_of_line(advance(lexer, source), lexed <> char)
-      }
-  }
+fn lex_until_end_of_line(lexer: Lexer) -> #(Lexer, String) {
+  let #(before, split, after) =
+    splitter.split(lexer.splitters.until_end_of_line, lexer.source)
+  #(advance(lexer, split <> after), before)
 }
 
 fn advance(lexer: Lexer, source: String) -> Lexer {

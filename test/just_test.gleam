@@ -9,9 +9,16 @@ pub fn main() -> Nil {
   gleeunit.main()
 }
 
-fn assert_roundtrip(src: String) -> Nil {
+fn assert_roundtrip(src: String, allow_errors: Bool) -> Nil {
   let #(tokens, errors) = just.new(src) |> just.tokenise
-  let assert [] = errors
+  case allow_errors {
+    True -> Nil
+    False -> {
+      let assert [] = errors
+      Nil
+    }
+  }
+
   just.to_source(tokens) |> should.equal(src)
 }
 
@@ -69,15 +76,29 @@ pub fn stdlib_ffi_roundtrip_test() {
       "build/packages/gleam_stdlib/src/gleam_stdlib_decode_ffi.mjs",
     )
 
-  assert_roundtrip(stdlib_ffi_file)
-  assert_roundtrip(stdlib_dict_file)
-  assert_roundtrip(stdlib_decode_file)
+  assert_roundtrip(stdlib_ffi_file, False)
+  assert_roundtrip(stdlib_dict_file, False)
+  assert_roundtrip(stdlib_decode_file, False)
 }
 
 pub fn tokens_roundtrip_test() {
   let assert Ok(example_file) = simplifile.read("test/tokens.js")
 
-  assert_roundtrip(example_file)
+  assert_roundtrip(example_file, False)
+}
+
+pub fn errors_roundtrip_test() {
+  assert_roundtrip(
+    "
+let unknown = @;
+let ustring = 'This string does not finish
+let uregex = /uh oh
+let badNumber = 0xabcdefg;
+/*
+This comment spans the rest of the program.
+",
+    True,
+  )
 }
 
 pub fn regex_token_test() {
