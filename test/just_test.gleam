@@ -1,6 +1,5 @@
 import gleam/list
 import gleeunit
-import gleeunit/should
 import just
 import just/token
 import simplifile
@@ -14,12 +13,12 @@ fn assert_roundtrip(src: String, allow_errors: Bool) -> Nil {
   case allow_errors {
     True -> Nil
     False -> {
-      let assert [] = errors
+      assert errors == []
       Nil
     }
   }
 
-  just.to_source(tokens) |> should.equal(src)
+  assert just.to_source(tokens) == src
 }
 
 fn assert_tokens(src: String, tokens: List(token.Token)) -> Nil {
@@ -40,9 +39,9 @@ fn do_assert_tokens(
     True -> just.strict_mode(just.new(src))
   }
   let #(lexed, errors) = lexer |> just.ignore_whitespace |> just.tokenise
-  let assert [] = errors
+  assert errors == []
   let tokens = list.append(tokens, [token.EndOfFile])
-  should.equal(lexed, tokens)
+  assert lexed == tokens
 }
 
 fn assert_errors(src: String, errors: List(just.Error)) -> Nil {
@@ -63,7 +62,7 @@ fn do_assert_errors(
     True -> just.strict_mode(just.new(src))
   }
   let #(_, found_errors) = just.tokenise(lexer)
-  should.equal(found_errors, errors)
+  assert found_errors == errors
 }
 
 pub fn stdlib_ffi_roundtrip_test() {
