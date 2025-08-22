@@ -5,19 +5,18 @@ A JavaScript lexer and syntax highlighter for Gleam!
 [![Package Version](https://img.shields.io/hexpm/v/just)](https://hex.pm/packages/just)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/just/)
 
-Just is a JavaScript lexer and syntax highlighter written in Gleam.  
-The `just` module, based on [`glexer`](https://hexdocs.mp/glexer) exposes a
-standard lexer API, allowing you to convert JavaScript source code into tokens.  
-The `just/highlight` module allows you to highlight javascript code using ansi
-colours, html or a custom format. Heavily inspired by [`contour`](https://hexdocs.pm/contour).
+Just is a JavaScript lexer and syntax highlighter written in Gleam. The lexer is
+based on [`glexer`](https://hexdocs.mp/glexer), allowing you to convert JavaScript
+source code into tokens. There is also an API which allows you to highlight
+JavaScript code using ansi colours, html or a custom format. Heavily inspired
+by [`contour`](https://hexdocs.pm/contour).
 
 ```sh
-gleam add just@1
+gleam add just@2
 ```
 
 ```gleam
 import just
-import just/highlight
 
 pub fn main() {
   let code = "console.log('Hello, world!');"
@@ -29,15 +28,15 @@ pub fn main() {
   parse_js(tokens)
 
   // Highlight with ansi codes to print in the terminal
-  let highlighted = highlight.ansi(code)
+  let highlighted = just.highlight_ansi(code)
   io.println(highlighted)
 
   // Render to html to show in the browser
-  let html = highlight.html(code)
+  let html = just.highlight_html(code)
   io.println("<pre><code>" <> html <> "</code></pre>")
 
   // Convert to "highlighting tokens" to highlight in some other way
-  let highlight_tokens = highlight.tokens(code)
+  let highlight_tokens = just.highlight_tokens(code)
   highlight_tokens_some_other_way(highlight_tokens)
 }
 ```
