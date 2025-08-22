@@ -1,0 +1,17 @@
+when:
+  - event: ["push", "pull_request"]
+    branch: ["main"]
+
+dependencies:
+  nixpkgs:
+    - gleam
+    - erlang_28
+    - nodejs_24
+
+steps:
+  - name: run all tests
+    command: |
+      gleam deps download
+      gleam test --target erlang
+      gleam test --target javascript
+      gleam format --check src test
