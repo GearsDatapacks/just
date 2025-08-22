@@ -1,6 +1,8 @@
+import gleam
 import gleam/list
 import gleam/string
-import just/token.{type Token}
+import gleam_community/ansi
+import houdini
 import splitter.{type Splitter}
 
 pub opaque type Lexer {
@@ -33,10 +35,10 @@ type LexerMode {
 
 pub type Error {
   UnknownCharacter(character: String)
-  UnterminatedString
-  UnterminatedComment
-  UnterminatedRegularExpression
-  UnterminatedTemplate
+  UnterminatedStringLiteral
+  UnterminatedMultilineComment
+  UnterminatedRegExpLiteral
+  UnterminatedTemplateLiteral
   LetterAfterNumber
   NumericSeparatorNotAllowed
   ExpectedExponent
@@ -53,21 +55,354 @@ pub fn stringify_error(error: Error) -> String {
     ExpectedExponent -> "Expected an exponent"
     NumericSeparatorNotAllowed -> "Numeric separator is not allowed here"
     UnknownCharacter(character) -> "Unexpected character: `" <> character <> "`"
-    UnterminatedComment -> "Unterminated comment"
-    UnterminatedRegularExpression -> "Unterminated regular expression literal"
-    UnterminatedString -> "Unterminated strint literal"
-    UnterminatedTemplate -> "Unterminated template literal"
+    UnterminatedMultilineComment -> "Unterminated comment"
+    UnterminatedRegExpLiteral -> "Unterminated regular expression literal"
+    UnterminatedStringLiteral -> "Unterminated string literal"
+    UnterminatedTemplateLiteral -> "Unterminated template literal"
     ZeroPrefixedNumberInStrictMode ->
       "Zero-prefixed numbers are not allowed in strict mode"
+  }
+}
+
+pub type Token {
+  // Comments and whitespace
+  SingleLineComment(String)
+  MultiLineComment(String)
+  HashBangComment(String)
+  Whitespace(String)
+  LineTerminator(String)
+  EndOfFile
+
+  // Literals
+  Identifier(String)
+  PrivateIdentifier(String)
+  Number(String)
+  BigInt(String)
+  String(quote: String, contents: String)
+  RegularExpression(contents: String, flags: String)
+  TemplateHead(String)
+  TemplateMiddle(String)
+  TemplateTail(String)
+
+  // Keywords
+  Break
+  Case
+  Catch
+  Class
+  Const
+  Continue
+  Debugger
+  Default
+  Delete
+  Do
+  Else
+  Export
+  Extends
+  False
+  Finally
+  For
+  Function
+  If
+  Import
+  In
+  Instanceof
+  New
+  Null
+  Return
+  Super
+  Switch
+  This
+  Throw
+  True
+  Try
+  Typeof
+  Var
+  Void
+  While
+  With
+
+  // Keywords in strict mode
+  Let
+  Static
+  Yield
+
+  // Future reserved words
+  Enum
+
+  // Future reserved words in strict mode
+  Implements
+  Interface
+  Package
+  Private
+  Protected
+
+  // Contextual keywords
+  ContextualKeyword(ContextualKeyword)
+
+  // Grouping
+  LeftBrace
+  RightBrace
+  LeftParen
+  RightParen
+  LeftSquare
+  RightSquare
+
+  // Separators
+  Dot
+  TripleDot
+  Semicolon
+  Comma
+  Colon
+  Arrow
+
+  // Comparison
+  Less
+  Greater
+  LessEqual
+  GreaterEqual
+  DoubleEqual
+  BangEqual
+  TripleEqual
+  BangDoubleEqual
+
+  // Arithmetic
+  Plus
+  Minus
+  Star
+  Slash
+  Percent
+  DoubleStar
+  DoublePlus
+  DoubleMinus
+  DoubleLess
+  DoubleGreater
+  TripleGreater
+  Ampersand
+  Pipe
+  Caret
+  Tilde
+
+  // Logic
+  Bang
+  DoubleAmpersand
+  DoublePipe
+  Question
+  DoubleQuestion
+  QuestionDot
+
+  // Assignment
+  Equal
+  PlusEqual
+  MinusEqual
+  StarEqual
+  SlashEqual
+  PercentEqual
+  DoubleStarEqual
+  DoubleLessEqual
+  DoubleGreaterEqual
+  TripleGreaterEqual
+  AmpersandEqual
+  PipeEqual
+  CaratEqual
+  DoubleAmpersandEqual
+  DoublePipeEqual
+  DoubleQuestionEqual
+
+  // Invalid tokens
+  Unknown(String)
+  UnterminatedString(quote: String, contents: String)
+  UnterminatedTemplate(String)
+  UnterminatedRegularExpression(String)
+  UnterminatedComment(String)
+}
+
+pub type ContextualKeyword {
+  As
+  Async
+  Await
+  From
+  Get
+  ContextualLet
+  Of
+  Set
+  ContextualStatic
+  ContextualYield
+}
+
+pub fn contextual_keyword_name(keyword: ContextualKeyword) -> String {
+  case keyword {
+    As -> "as"
+    Async -> "async"
+    Await -> "await"
+    From -> "from"
+    Get -> "get"
+    ContextualLet -> "let"
+    Of -> "of"
+    ContextualStatic -> "static"
+    Set -> "set"
+    ContextualYield -> "yield"
+  }
+}
+
+pub fn token_to_source(token: Token) -> String {
+  case token {
+    // Comments and whitespace
+    SingleLineComment(value) -> "//" <> value
+    MultiLineComment(value) -> "/*" <> value <> "*/"
+    HashBangComment(value) -> "#!" <> value
+    Whitespace(value) -> value
+    LineTerminator(value) -> value
+    EndOfFile -> ""
+
+    // Literals
+    Identifier(value) -> value
+    PrivateIdentifier(value) -> "#" <> value
+    Number(value) -> value
+    BigInt(value) -> value <> "n"
+    String(quote:, contents:) -> quote <> contents <> quote
+    RegularExpression(contents:, flags:) -> "/" <> contents <> "/" <> flags
+    TemplateHead(value) -> "`" <> value <> "${"
+    TemplateMiddle(value) -> "}" <> value <> "${"
+    TemplateTail(value) -> "}" <> value <> "`"
+
+    // Keywords
+    Break -> "break"
+    Case -> "case"
+    Catch -> "catch"
+    Class -> "class"
+    Const -> "const"
+    Continue -> "continue"
+    Debugger -> "debugger"
+    Default -> "default"
+    Delete -> "delete"
+    Do -> "do"
+    Else -> "else"
+    Export -> "export"
+    Extends -> "extends"
+    False -> "false"
+    Finally -> "finally"
+    For -> "for"
+    Function -> "function"
+    If -> "if"
+    Import -> "import"
+    In -> "in"
+    Instanceof -> "instanceof"
+    New -> "new"
+    Null -> "null"
+    Return -> "return"
+    Super -> "super"
+    Switch -> "switch"
+    This -> "this"
+    Throw -> "throw"
+    True -> "true"
+    Try -> "try"
+    Typeof -> "typeof"
+    Var -> "var"
+    Void -> "void"
+    While -> "while"
+    With -> "with"
+
+    // Keywords in strict mode
+    Let -> "let"
+    Static -> "static"
+    Yield -> "yield"
+
+    // Future reserved words
+    Enum -> "enum"
+
+    // Future reserved words in strict mode
+    Implements -> "implements"
+    Interface -> "interface"
+    Package -> "package"
+    Private -> "private"
+    Protected -> "protected"
+
+    // Contextual keywords
+    ContextualKeyword(keyword) -> contextual_keyword_name(keyword)
+
+    // Grouping
+    LeftBrace -> "{"
+    RightBrace -> "}"
+    LeftParen -> "("
+    RightParen -> ")"
+    LeftSquare -> "["
+    RightSquare -> "]"
+
+    // Separators
+    Dot -> "."
+    TripleDot -> "..."
+    Semicolon -> ";"
+    Comma -> ","
+    Colon -> ":"
+    Arrow -> "=>"
+
+    // Comparison
+    Less -> "<"
+    Greater -> ">"
+    LessEqual -> "<="
+    GreaterEqual -> ">="
+    DoubleEqual -> "=="
+    BangEqual -> "!="
+    TripleEqual -> "==="
+    BangDoubleEqual -> "!=="
+
+    // Arithmetic
+    Plus -> "+"
+    Minus -> "-"
+    Star -> "*"
+    Slash -> "/"
+    Percent -> "%"
+    DoubleStar -> "**"
+    DoublePlus -> "++"
+    DoubleMinus -> "--"
+    DoubleLess -> "<<"
+    DoubleGreater -> ">>"
+    TripleGreater -> ">>>"
+    Ampersand -> "&"
+    Pipe -> "|"
+    Caret -> "^"
+    Tilde -> "~"
+
+    // Logic
+    Bang -> "!"
+    DoubleAmpersand -> "&&"
+    DoublePipe -> "||"
+    Question -> "?"
+    DoubleQuestion -> "??"
+    QuestionDot -> "?."
+
+    // Assignment
+    Equal -> "="
+    PlusEqual -> "+="
+    MinusEqual -> "-="
+    StarEqual -> "*="
+    SlashEqual -> "/="
+    PercentEqual -> "%="
+    DoubleStarEqual -> "**="
+    DoubleLessEqual -> "<<="
+    DoubleGreaterEqual -> ">>="
+    TripleGreaterEqual -> ">>>="
+    AmpersandEqual -> "&="
+    PipeEqual -> "|="
+    CaratEqual -> "^="
+    DoubleAmpersandEqual -> "&&="
+    DoublePipeEqual -> "||="
+    DoubleQuestionEqual -> "??="
+
+    Unknown(value) -> value
+    UnterminatedComment(value) -> "/*" <> value
+    UnterminatedRegularExpression(value) -> "/" <> value
+    UnterminatedString(quote:, contents:) -> quote <> contents
+    UnterminatedTemplate(value) -> value
   }
 }
 
 pub fn new(source: String) -> Lexer {
   Lexer(
     source:,
-    ignore_comments: False,
-    ignore_whitespace: False,
-    strict_mode: False,
+    ignore_comments: gleam.False,
+    ignore_whitespace: gleam.False,
+    strict_mode: gleam.False,
     mode: TreatSlashAsRegex,
     errors: [],
     splitters: make_splitters(),
@@ -88,15 +423,15 @@ fn make_splitters() -> Splitters {
 }
 
 pub fn ignore_comments(lexer: Lexer) -> Lexer {
-  Lexer(..lexer, ignore_comments: True)
+  Lexer(..lexer, ignore_comments: gleam.True)
 }
 
 pub fn ignore_whitespace(lexer: Lexer) -> Lexer {
-  Lexer(..lexer, ignore_whitespace: True)
+  Lexer(..lexer, ignore_whitespace: gleam.True)
 }
 
 pub fn strict_mode(lexer: Lexer) -> Lexer {
-  Lexer(..lexer, strict_mode: True)
+  Lexer(..lexer, strict_mode: gleam.True)
 }
 
 pub fn tokenise(lexer: Lexer) -> #(List(Token), List(Error)) {
@@ -105,7 +440,7 @@ pub fn tokenise(lexer: Lexer) -> #(List(Token), List(Error)) {
 }
 
 pub fn to_source(tokens: List(Token)) -> String {
-  list.fold(tokens, "", fn(code, token) { code <> token.to_source(token) })
+  list.fold(tokens, "", fn(code, token) { code <> token_to_source(token) })
 }
 
 fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
@@ -117,8 +452,8 @@ fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
         |> lex_until_end_of_line
 
       #(lexer, case lexer.ignore_comments {
-        True -> []
-        False -> [token.HashBangComment(contents)]
+        gleam.True -> []
+        gleam.False -> [HashBangComment(contents)]
       })
     }
     _ -> #(lexer, [])
@@ -127,11 +462,11 @@ fn maybe_lex_hashbang_comment(lexer: Lexer) -> #(Lexer, List(Token)) {
 
 fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> #(List(Token), List(Error)) {
   case next(lexer) {
-    #(lexer, token.EndOfFile) -> #(
-      list.reverse([token.EndOfFile, ..tokens]),
+    #(lexer, EndOfFile) -> #(
+      list.reverse([EndOfFile, ..tokens]),
       list.reverse(lexer.errors),
     )
-    #(lexer, token.TemplateHead(_) as token) -> {
+    #(lexer, TemplateHead(_) as token) -> {
       let #(lexer, tokens) =
         lex_template_parts(
           update_mode_with_token(lexer, token),
@@ -147,14 +482,14 @@ fn do_tokenise(lexer: Lexer, tokens: List(Token)) -> #(List(Token), List(Error))
 
 fn maybe_token(lexer: Lexer, token: Token, condition: Bool) -> #(Lexer, Token) {
   case condition {
-    True -> #(lexer, token)
-    False -> next(lexer)
+    gleam.True -> #(lexer, token)
+    gleam.False -> next(lexer)
   }
 }
 
 fn next(lexer: Lexer) -> #(Lexer, Token) {
   case lexer.source {
-    "" -> #(lexer, token.EndOfFile)
+    "" -> #(lexer, EndOfFile)
 
     "\t" as space <> source
     | "\u{000B}" as space <> source
@@ -185,28 +520,24 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
     | "\u{2029}" as space <> source ->
       maybe_token(
         advance(lexer, source),
-        token.LineTerminator(space),
+        LineTerminator(space),
         !lexer.ignore_whitespace,
       )
 
     "//" <> source -> {
       let #(lexer, contents) = lex_until_end_of_line(advance(lexer, source))
-      maybe_token(
-        lexer,
-        token.SingleLineComment(contents),
-        !lexer.ignore_comments,
-      )
+      maybe_token(lexer, SingleLineComment(contents), !lexer.ignore_comments)
     }
     "/*" <> source -> lex_multiline_comment(advance(lexer, source))
 
     "0b" as prefix <> source | "0B" as prefix <> source ->
-      lex_radix_number(advance(lexer, source), 2, prefix, False)
+      lex_radix_number(advance(lexer, source), 2, prefix, gleam.False)
 
     "0o" as prefix <> source | "0O" as prefix <> source ->
-      lex_radix_number(advance(lexer, source), 8, prefix, False)
+      lex_radix_number(advance(lexer, source), 8, prefix, gleam.False)
 
     "0x" as prefix <> source | "0X" as prefix <> source ->
-      lex_radix_number(advance(lexer, source), 16, prefix, False)
+      lex_radix_number(advance(lexer, source), 16, prefix, gleam.False)
 
     "00" as digit <> source
     | "01" as digit <> source
@@ -216,10 +547,10 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
     | "05" as digit <> source
     | "06" as digit <> source
     | "07" as digit <> source ->
-      lex_leading_zero_number(advance(lexer, source), digit, False)
+      lex_leading_zero_number(advance(lexer, source), digit, gleam.False)
 
     "08" as digit <> source | "09" as digit <> source ->
-      lex_leading_zero_number(advance(lexer, source), digit, True)
+      lex_leading_zero_number(advance(lexer, source), digit, gleam.True)
 
     "1" as digit <> source
     | "2" as digit <> source
@@ -246,72 +577,72 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
       lex_number(advance(lexer, source), digit, Decimal, AfterNumber)
 
     "/" <> source if lexer.mode == TreatSlashAsRegex ->
-      lex_regex(advance(lexer, source), "", False)
+      lex_regex(advance(lexer, source), "", gleam.False)
 
-    "{" <> source -> #(advance(lexer, source), token.LeftBrace)
-    "}" <> source -> #(advance(lexer, source), token.RightBrace)
-    "(" <> source -> #(advance(lexer, source), token.LeftParen)
-    ")" <> source -> #(advance(lexer, source), token.RightParen)
-    "[" <> source -> #(advance(lexer, source), token.LeftSquare)
-    "]" <> source -> #(advance(lexer, source), token.RightSquare)
+    "{" <> source -> #(advance(lexer, source), LeftBrace)
+    "}" <> source -> #(advance(lexer, source), RightBrace)
+    "(" <> source -> #(advance(lexer, source), LeftParen)
+    ")" <> source -> #(advance(lexer, source), RightParen)
+    "[" <> source -> #(advance(lexer, source), LeftSquare)
+    "]" <> source -> #(advance(lexer, source), RightSquare)
 
-    "..." <> source -> #(advance(lexer, source), token.TripleDot)
-    "." <> source -> #(advance(lexer, source), token.Dot)
-    ";" <> source -> #(advance(lexer, source), token.Semicolon)
-    "," <> source -> #(advance(lexer, source), token.Comma)
-    ":" <> source -> #(advance(lexer, source), token.Colon)
-    "=>" <> source -> #(advance(lexer, source), token.Arrow)
+    "..." <> source -> #(advance(lexer, source), TripleDot)
+    "." <> source -> #(advance(lexer, source), Dot)
+    ";" <> source -> #(advance(lexer, source), Semicolon)
+    "," <> source -> #(advance(lexer, source), Comma)
+    ":" <> source -> #(advance(lexer, source), Colon)
+    "=>" <> source -> #(advance(lexer, source), Arrow)
 
-    "<=" <> source -> #(advance(lexer, source), token.LessEqual)
-    ">=" <> source -> #(advance(lexer, source), token.GreaterEqual)
-    "===" <> source -> #(advance(lexer, source), token.TripleEqual)
-    "!==" <> source -> #(advance(lexer, source), token.BangDoubleEqual)
-    "==" <> source -> #(advance(lexer, source), token.DoubleEqual)
-    "!=" <> source -> #(advance(lexer, source), token.BangEqual)
+    "<=" <> source -> #(advance(lexer, source), LessEqual)
+    ">=" <> source -> #(advance(lexer, source), GreaterEqual)
+    "===" <> source -> #(advance(lexer, source), TripleEqual)
+    "!==" <> source -> #(advance(lexer, source), BangDoubleEqual)
+    "==" <> source -> #(advance(lexer, source), DoubleEqual)
+    "!=" <> source -> #(advance(lexer, source), BangEqual)
 
-    "=" <> source -> #(advance(lexer, source), token.Equal)
-    "+=" <> source -> #(advance(lexer, source), token.PlusEqual)
-    "-=" <> source -> #(advance(lexer, source), token.MinusEqual)
-    "*=" <> source -> #(advance(lexer, source), token.StarEqual)
-    "/=" <> source -> #(advance(lexer, source), token.SlashEqual)
-    "%=" <> source -> #(advance(lexer, source), token.PercentEqual)
-    "**=" <> source -> #(advance(lexer, source), token.DoubleStarEqual)
-    "<<=" <> source -> #(advance(lexer, source), token.DoubleLessEqual)
-    ">>=" <> source -> #(advance(lexer, source), token.DoubleGreaterEqual)
-    ">>>=" <> source -> #(advance(lexer, source), token.TripleGreaterEqual)
-    "&=" <> source -> #(advance(lexer, source), token.AmpersandEqual)
-    "|=" <> source -> #(advance(lexer, source), token.PipeEqual)
-    "^=" <> source -> #(advance(lexer, source), token.CaratEqual)
-    "&&=" <> source -> #(advance(lexer, source), token.DoubleAmpersandEqual)
-    "||=" <> source -> #(advance(lexer, source), token.DoublePipeEqual)
-    "??=" <> source -> #(advance(lexer, source), token.DoubleQuestionEqual)
+    "=" <> source -> #(advance(lexer, source), Equal)
+    "+=" <> source -> #(advance(lexer, source), PlusEqual)
+    "-=" <> source -> #(advance(lexer, source), MinusEqual)
+    "*=" <> source -> #(advance(lexer, source), StarEqual)
+    "/=" <> source -> #(advance(lexer, source), SlashEqual)
+    "%=" <> source -> #(advance(lexer, source), PercentEqual)
+    "**=" <> source -> #(advance(lexer, source), DoubleStarEqual)
+    "<<=" <> source -> #(advance(lexer, source), DoubleLessEqual)
+    ">>=" <> source -> #(advance(lexer, source), DoubleGreaterEqual)
+    ">>>=" <> source -> #(advance(lexer, source), TripleGreaterEqual)
+    "&=" <> source -> #(advance(lexer, source), AmpersandEqual)
+    "|=" <> source -> #(advance(lexer, source), PipeEqual)
+    "^=" <> source -> #(advance(lexer, source), CaratEqual)
+    "&&=" <> source -> #(advance(lexer, source), DoubleAmpersandEqual)
+    "||=" <> source -> #(advance(lexer, source), DoublePipeEqual)
+    "??=" <> source -> #(advance(lexer, source), DoubleQuestionEqual)
 
-    "<<" <> source -> #(advance(lexer, source), token.DoubleLess)
-    ">>>" <> source -> #(advance(lexer, source), token.TripleGreater)
-    ">>" <> source -> #(advance(lexer, source), token.DoubleGreater)
+    "<<" <> source -> #(advance(lexer, source), DoubleLess)
+    ">>>" <> source -> #(advance(lexer, source), TripleGreater)
+    ">>" <> source -> #(advance(lexer, source), DoubleGreater)
 
-    "!" <> source -> #(advance(lexer, source), token.Bang)
-    "&&" <> source -> #(advance(lexer, source), token.DoubleAmpersand)
-    "||" <> source -> #(advance(lexer, source), token.DoublePipe)
-    "??" <> source -> #(advance(lexer, source), token.DoubleQuestion)
-    "?." <> source -> #(advance(lexer, source), token.QuestionDot)
-    "?" <> source -> #(advance(lexer, source), token.Question)
+    "!" <> source -> #(advance(lexer, source), Bang)
+    "&&" <> source -> #(advance(lexer, source), DoubleAmpersand)
+    "||" <> source -> #(advance(lexer, source), DoublePipe)
+    "??" <> source -> #(advance(lexer, source), DoubleQuestion)
+    "?." <> source -> #(advance(lexer, source), QuestionDot)
+    "?" <> source -> #(advance(lexer, source), Question)
 
-    "<" <> source -> #(advance(lexer, source), token.Less)
-    ">" <> source -> #(advance(lexer, source), token.Greater)
+    "<" <> source -> #(advance(lexer, source), Less)
+    ">" <> source -> #(advance(lexer, source), Greater)
 
-    "**" <> source -> #(advance(lexer, source), token.DoubleStar)
-    "++" <> source -> #(advance(lexer, source), token.DoublePlus)
-    "--" <> source -> #(advance(lexer, source), token.DoubleMinus)
-    "+" <> source -> #(advance(lexer, source), token.Plus)
-    "-" <> source -> #(advance(lexer, source), token.Minus)
-    "*" <> source -> #(advance(lexer, source), token.Star)
-    "/" <> source -> #(advance(lexer, source), token.Slash)
-    "%" <> source -> #(advance(lexer, source), token.Percent)
-    "&" <> source -> #(advance(lexer, source), token.Ampersand)
-    "|" <> source -> #(advance(lexer, source), token.Pipe)
-    "^" <> source -> #(advance(lexer, source), token.Caret)
-    "~" <> source -> #(advance(lexer, source), token.Tilde)
+    "**" <> source -> #(advance(lexer, source), DoubleStar)
+    "++" <> source -> #(advance(lexer, source), DoublePlus)
+    "--" <> source -> #(advance(lexer, source), DoubleMinus)
+    "+" <> source -> #(advance(lexer, source), Plus)
+    "-" <> source -> #(advance(lexer, source), Minus)
+    "*" <> source -> #(advance(lexer, source), Star)
+    "/" <> source -> #(advance(lexer, source), Slash)
+    "%" <> source -> #(advance(lexer, source), Percent)
+    "&" <> source -> #(advance(lexer, source), Ampersand)
+    "|" <> source -> #(advance(lexer, source), Pipe)
+    "^" <> source -> #(advance(lexer, source), Caret)
+    "~" <> source -> #(advance(lexer, source), Tilde)
 
     "#" <> source -> {
       let #(lexer, name) = lex_identifier(advance(lexer, source), "")
@@ -331,7 +662,7 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
         _ -> lexer
       }
 
-      #(lexer, token.PrivateIdentifier(name))
+      #(lexer, PrivateIdentifier(name))
     }
 
     "_" as character <> source
@@ -401,10 +732,10 @@ fn next(lexer: Lexer) -> #(Lexer, Token) {
 
     _ ->
       case string.pop_grapheme(lexer.source) {
-        Error(_) -> #(lexer, token.EndOfFile)
+        Error(_) -> #(lexer, EndOfFile)
         Ok(#(character, source)) -> #(
           lexer |> advance(source) |> error(UnknownCharacter(character)),
-          token.Unknown(character),
+          Unknown(character),
         )
       }
   }
@@ -414,14 +745,14 @@ fn lex_multiline_comment(lexer: Lexer) -> #(Lexer, Token) {
   case splitter.split(lexer.splitters.multiline_comment, lexer.source) {
     #(before, "", "") ->
       maybe_token(
-        error(advance(lexer, ""), UnterminatedComment),
-        token.UnterminatedComment(before),
+        error(advance(lexer, ""), UnterminatedMultilineComment),
+        UnterminatedComment(before),
         !lexer.ignore_comments,
       )
     #(before, _, after) ->
       maybe_token(
         advance(lexer, after),
-        token.MultiLineComment(before),
+        MultiLineComment(before),
         !lexer.ignore_comments,
       )
   }
@@ -430,70 +761,70 @@ fn lex_multiline_comment(lexer: Lexer) -> #(Lexer, Token) {
 fn identifier_token(name: String, strict_mode: Bool) -> Token {
   case name {
     // Keywords
-    "break" -> token.Break
-    "case" -> token.Case
-    "catch" -> token.Catch
-    "class" -> token.Class
-    "const" -> token.Const
-    "continue" -> token.Continue
-    "debugger" -> token.Debugger
-    "default" -> token.Default
-    "delete" -> token.Delete
-    "do" -> token.Do
-    "else" -> token.Else
-    "export" -> token.Export
-    "extends" -> token.Extends
-    "false" -> token.False
-    "finally" -> token.Finally
-    "for" -> token.For
-    "function" -> token.Function
-    "if" -> token.If
-    "import" -> token.Import
-    "in" -> token.In
-    "instanceof" -> token.Instanceof
-    "new" -> token.New
-    "null" -> token.Null
-    "return" -> token.Return
-    "super" -> token.Super
-    "switch" -> token.Switch
-    "this" -> token.This
-    "throw" -> token.Throw
-    "true" -> token.True
-    "try" -> token.Try
-    "typeof" -> token.Typeof
-    "var" -> token.Var
-    "void" -> token.Void
-    "while" -> token.While
-    "with" -> token.With
+    "break" -> Break
+    "case" -> Case
+    "catch" -> Catch
+    "class" -> Class
+    "const" -> Const
+    "continue" -> Continue
+    "debugger" -> Debugger
+    "default" -> Default
+    "delete" -> Delete
+    "do" -> Do
+    "else" -> Else
+    "export" -> Export
+    "extends" -> Extends
+    "false" -> False
+    "finally" -> Finally
+    "for" -> For
+    "function" -> Function
+    "if" -> If
+    "import" -> Import
+    "in" -> In
+    "instanceof" -> Instanceof
+    "new" -> New
+    "null" -> Null
+    "return" -> Return
+    "super" -> Super
+    "switch" -> Switch
+    "this" -> This
+    "throw" -> Throw
+    "true" -> True
+    "try" -> Try
+    "typeof" -> Typeof
+    "var" -> Var
+    "void" -> Void
+    "while" -> While
+    "with" -> With
 
     // Keywords in strict mode
-    "let" if strict_mode -> token.Let
-    "static" if strict_mode -> token.Static
-    "yield" if strict_mode -> token.Yield
+    "let" if strict_mode -> Let
+    "static" if strict_mode -> Static
+    "yield" if strict_mode -> Yield
 
     // Future reserved words
-    "enum" -> token.Enum
+    "enum" -> Enum
 
     // Future reserved words in strict mode
-    "implements" if strict_mode -> token.Implements
-    "interface" if strict_mode -> token.Interface
-    "package" if strict_mode -> token.Package
-    "private" if strict_mode -> token.Private
-    "protected" if strict_mode -> token.Protected
+    "implements" if strict_mode -> Implements
+    "interface" if strict_mode -> Interface
+    "package" if strict_mode -> Package
+    "private" if strict_mode -> Private
+    "protected" if strict_mode -> Protected
 
     // Contextual keywords
-    "as" -> token.ContextualKeyword(token.As)
-    "async" -> token.ContextualKeyword(token.Async)
-    "await" -> token.ContextualKeyword(token.Await)
-    "from" -> token.ContextualKeyword(token.From)
-    "get" -> token.ContextualKeyword(token.Get)
-    "let" -> token.ContextualKeyword(token.ContextualLet)
-    "of" -> token.ContextualKeyword(token.Of)
-    "set" -> token.ContextualKeyword(token.Set)
-    "static" -> token.ContextualKeyword(token.ContextualStatic)
-    "yield" -> token.ContextualKeyword(token.ContextualYield)
+    "as" -> ContextualKeyword(As)
+    "async" -> ContextualKeyword(Async)
+    "await" -> ContextualKeyword(Await)
+    "from" -> ContextualKeyword(From)
+    "get" -> ContextualKeyword(Get)
+    "let" -> ContextualKeyword(ContextualLet)
+    "of" -> ContextualKeyword(Of)
+    "set" -> ContextualKeyword(Set)
+    "static" -> ContextualKeyword(ContextualStatic)
+    "yield" -> ContextualKeyword(ContextualYield)
 
-    _ -> token.Identifier(name)
+    _ -> Identifier(name)
   }
 }
 
@@ -551,27 +882,21 @@ fn lex_number(
     "_" <> source, _, AfterNumber ->
       lex_number(advance(lexer, source), lexed <> "_", mode, AfterSeparator)
 
-    "_" <> _, _, _ -> #(
-      error(lexer, NumericSeparatorNotAllowed),
-      token.Number(lexed),
-    )
+    "_" <> _, _, _ -> #(error(lexer, NumericSeparatorNotAllowed), Number(lexed))
 
     "n" <> source, Initial, AfterNumber -> #(
       ensure_no_letters_after_numbers(advance(lexer, source)),
-      token.BigInt(lexed),
+      BigInt(lexed),
     )
 
-    _, _, AfterExponent -> #(
-      error(lexer, ExpectedExponent),
-      token.Number(lexed),
-    )
+    _, _, AfterExponent -> #(error(lexer, ExpectedExponent), Number(lexed))
 
     _, _, AfterSeparator -> #(
       error(lexer, NumericSeparatorNotAllowed),
-      token.Number(lexed),
+      Number(lexed),
     )
 
-    _, _, _ -> #(ensure_no_letters_after_numbers(lexer), token.Number(lexed))
+    _, _, _ -> #(ensure_no_letters_after_numbers(lexer), Number(lexed))
   }
 }
 
@@ -605,10 +930,10 @@ fn lex_leading_zero_number(
     _ -> {
       let lexer = ensure_no_letters_after_numbers(lexer)
       let lexer = case lexer.strict_mode {
-        False -> lexer
-        True -> error(lexer, ZeroPrefixedNumberInStrictMode)
+        gleam.False -> lexer
+        gleam.True -> error(lexer, ZeroPrefixedNumberInStrictMode)
       }
-      #(lexer, token.Number(lexed))
+      #(lexer, Number(lexed))
     }
   }
 }
@@ -621,7 +946,12 @@ fn lex_radix_number(
 ) -> #(Lexer, Token) {
   case lexer.source {
     "0" as digit <> source | "1" as digit <> source ->
-      lex_radix_number(advance(lexer, source), radix, lexed <> digit, True)
+      lex_radix_number(
+        advance(lexer, source),
+        radix,
+        lexed <> digit,
+        gleam.True,
+      )
 
     "2" as digit <> source
       | "3" as digit <> source
@@ -630,7 +960,13 @@ fn lex_radix_number(
       | "6" as digit <> source
       | "7" as digit <> source
       if radix >= 8
-    -> lex_radix_number(advance(lexer, source), radix, lexed <> digit, True)
+    ->
+      lex_radix_number(
+        advance(lexer, source),
+        radix,
+        lexed <> digit,
+        gleam.True,
+      )
 
     "8" as digit <> source
       | "9" as digit <> source
@@ -647,21 +983,27 @@ fn lex_radix_number(
       | "e" as digit <> source
       | "f" as digit <> source
       if radix == 16
-    -> lex_radix_number(advance(lexer, source), radix, lexed <> digit, True)
+    ->
+      lex_radix_number(
+        advance(lexer, source),
+        radix,
+        lexed <> digit,
+        gleam.True,
+      )
 
     "n" <> source if valid_delimiter -> #(
       ensure_no_letters_after_numbers(advance(lexer, source)),
-      token.BigInt(lexed),
+      BigInt(lexed),
     )
 
     "_" <> source if valid_delimiter ->
-      lex_radix_number(advance(lexer, source), radix, lexed <> "_", False)
+      lex_radix_number(advance(lexer, source), radix, lexed <> "_", gleam.False)
 
     _ if !valid_delimiter -> #(
       error(lexer, NumericSeparatorNotAllowed),
-      token.Number(lexed),
+      Number(lexed),
     )
-    _ -> #(ensure_no_letters_after_numbers(lexer), token.Number(lexed))
+    _ -> #(ensure_no_letters_after_numbers(lexer), Number(lexed))
   }
 }
 
@@ -730,20 +1072,20 @@ fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, Token) 
     splitter.split(lexer.splitters.string, lexer.source)
   case split {
     "" -> #(
-      error(advance(lexer, after), UnterminatedString),
-      token.UnterminatedString(quote:, contents: contents <> before),
+      error(advance(lexer, after), UnterminatedStringLiteral),
+      UnterminatedString(quote:, contents: contents <> before),
     )
 
     "\r" | "\n" -> #(
-      error(advance(lexer, split <> after), UnterminatedString),
-      token.UnterminatedString(quote:, contents: contents <> before),
+      error(advance(lexer, split <> after), UnterminatedStringLiteral),
+      UnterminatedString(quote:, contents: contents <> before),
     )
 
     "\\" ->
       case string.pop_grapheme(after) {
         Error(_) -> #(
-          error(advance(lexer, after), UnterminatedString),
-          token.UnterminatedString(quote:, contents:),
+          error(advance(lexer, after), UnterminatedStringLiteral),
+          UnterminatedString(quote:, contents:),
         )
         Ok(#(character, source)) ->
           lex_string(
@@ -755,7 +1097,7 @@ fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, Token) 
 
     _ if split == quote -> #(
       advance(lexer, after),
-      token.String(quote:, contents: contents <> before),
+      String(quote:, contents: contents <> before),
     )
 
     // Here, we've split on a quote which doesn't match the current string.
@@ -770,12 +1112,12 @@ fn lex_template_head(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
     splitter.split(lexer.splitters.template, lexer.source)
 
   case split {
-    "${" -> #(advance(lexer, after), token.TemplateHead(lexed <> before))
+    "${" -> #(advance(lexer, after), TemplateHead(lexed <> before))
     "\\" ->
       case string.pop_grapheme(after) {
         Error(_) -> #(
-          error(advance(lexer, after), UnterminatedString),
-          token.UnterminatedString("`", lexed <> before),
+          error(advance(lexer, after), UnterminatedStringLiteral),
+          UnterminatedString("`", lexed <> before),
         )
         Ok(#(character, source)) ->
           lex_template_head(
@@ -784,10 +1126,10 @@ fn lex_template_head(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
           )
       }
     "" -> #(
-      error(advance(lexer, after), UnterminatedString),
-      token.UnterminatedString("`", lexed <> before),
+      error(advance(lexer, after), UnterminatedStringLiteral),
+      UnterminatedString("`", lexed <> before),
     )
-    _ -> #(advance(lexer, after), token.String("`", lexed <> before))
+    _ -> #(advance(lexer, after), String("`", lexed <> before))
   }
 }
 
@@ -809,7 +1151,7 @@ fn lex_template_parts(
       case split {
         "${" -> {
           let lexer = advance(lexer, after)
-          let token = token.TemplateMiddle(lexed <> before)
+          let token = TemplateMiddle(lexed <> before)
           lex_template_parts(
             update_mode_with_token(lexer, token),
             [token, ..tokens],
@@ -818,8 +1160,8 @@ fn lex_template_parts(
         }
         "\\" ->
           case string.pop_grapheme(after) {
-            Error(_) -> #(error(lexer, UnterminatedTemplate), [
-              token.UnterminatedTemplate(lexed <> before),
+            Error(_) -> #(error(lexer, UnterminatedTemplateLiteral), [
+              UnterminatedTemplate(lexed <> before),
               ..tokens
             ])
             Ok(#(character, source)) ->
@@ -829,29 +1171,26 @@ fn lex_template_parts(
                 LexTemplate(lexed <> before <> "\\" <> character),
               )
           }
-        "" -> #(error(advance(lexer, after), UnterminatedTemplate), [
-          token.UnterminatedTemplate(lexed <> before),
+        "" -> #(error(advance(lexer, after), UnterminatedTemplateLiteral), [
+          UnterminatedTemplate(lexed <> before),
           ..tokens
         ])
-        _ -> #(advance(lexer, after), [
-          token.TemplateTail(lexed <> before),
-          ..tokens
-        ])
+        _ -> #(advance(lexer, after), [TemplateTail(lexed <> before), ..tokens])
       }
     }
 
     LexTokens(bracket_level) ->
       case next(lexer) {
-        #(lexer, token.EndOfFile) -> #(lexer, tokens)
-        #(lexer, token.RightBrace) if bracket_level == 0 ->
+        #(lexer, EndOfFile) -> #(lexer, tokens)
+        #(lexer, RightBrace) if bracket_level == 0 ->
           lex_template_parts(lexer, tokens, LexTemplate(""))
-        #(lexer, token.RightBrace as token) ->
+        #(lexer, RightBrace as token) ->
           lex_template_parts(
             update_mode_with_token(lexer, token),
             [token, ..tokens],
             LexTokens(bracket_level - 1),
           )
-        #(lexer, token.LeftBrace as token) ->
+        #(lexer, LeftBrace as token) ->
           lex_template_parts(
             update_mode_with_token(lexer, token),
             [token, ..tokens],
@@ -869,24 +1208,24 @@ fn lex_template_parts(
 
 fn lex_regex(lexer: Lexer, lexed: String, in_group: Bool) -> #(Lexer, Token) {
   let splitter = case in_group {
-    False -> lexer.splitters.regex_regular
-    True -> lexer.splitters.regex_in_group
+    gleam.False -> lexer.splitters.regex_regular
+    gleam.True -> lexer.splitters.regex_in_group
   }
   let #(before, split, after) = splitter.split(splitter, lexer.source)
   case split {
     "/" -> {
       let lexer = advance(lexer, after)
       let #(lexer, flags) = lex_identifier(lexer, "")
-      #(lexer, token.RegularExpression(contents: lexed <> before, flags:))
+      #(lexer, RegularExpression(contents: lexed <> before, flags:))
     }
-    "[" -> lex_regex(advance(lexer, after), lexed <> before <> "[", True)
-    "]" -> lex_regex(advance(lexer, after), lexed <> before <> "]", False)
+    "[" -> lex_regex(advance(lexer, after), lexed <> before <> "[", gleam.True)
+    "]" -> lex_regex(advance(lexer, after), lexed <> before <> "]", gleam.False)
 
     "\\" ->
       case string.pop_grapheme(after) {
         Error(_) -> #(
-          error(advance(lexer, after), UnterminatedRegularExpression),
-          token.UnterminatedRegularExpression(lexed <> before),
+          error(advance(lexer, after), UnterminatedRegExpLiteral),
+          UnterminatedRegularExpression(lexed <> before),
         )
         Ok(#(character, source)) ->
           lex_regex(
@@ -897,8 +1236,8 @@ fn lex_regex(lexer: Lexer, lexed: String, in_group: Bool) -> #(Lexer, Token) {
       }
 
     _ -> #(
-      error(advance(lexer, split <> after), UnterminatedRegularExpression),
-      token.UnterminatedRegularExpression(lexed <> before),
+      error(advance(lexer, split <> after), UnterminatedRegExpLiteral),
+      UnterminatedRegularExpression(lexed <> before),
     )
   }
 }
@@ -1001,8 +1340,8 @@ fn whitespace(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
 
     _ ->
       case lexer.ignore_whitespace {
-        True -> next(lexer)
-        False -> #(lexer, token.Whitespace(lexed))
+        gleam.True -> next(lexer)
+        gleam.False -> #(lexer, Whitespace(lexed))
       }
   }
 }
@@ -1020,30 +1359,30 @@ fn advance(lexer: Lexer, source: String) -> Lexer {
 fn update_mode_with_token(lexer: Lexer, token: Token) -> Lexer {
   let mode = case token {
     // Comments and whitespace don't affect lexing mode
-    token.SingleLineComment(_)
-    | token.MultiLineComment(_)
-    | token.HashBangComment(_)
-    | token.Whitespace(_)
-    | token.LineTerminator(_)
-    | token.EndOfFile -> lexer.mode
+    SingleLineComment(_)
+    | MultiLineComment(_)
+    | HashBangComment(_)
+    | Whitespace(_)
+    | LineTerminator(_)
+    | EndOfFile -> lexer.mode
 
     // Values make us look for division
-    token.Identifier(_)
-    | token.PrivateIdentifier(_)
-    | token.Number(_)
-    | token.BigInt(_)
-    | token.String(..)
-    | token.RegularExpression(..)
-    | token.TemplateTail(_) -> TreatSlashAsDivision
+    Identifier(_)
+    | PrivateIdentifier(_)
+    | Number(_)
+    | BigInt(_)
+    | String(..)
+    | RegularExpression(..)
+    | TemplateTail(_) -> TreatSlashAsDivision
 
     // These keywords act as values, so we look for division after them
-    token.False | token.Null | token.This | token.True -> TreatSlashAsDivision
+    False | Null | This | True -> TreatSlashAsDivision
 
     // After a grouping we look for division
-    token.RightParen | token.RightSquare -> TreatSlashAsDivision
+    RightParen | RightSquare -> TreatSlashAsDivision
 
     // These can be either postfix or prefix. Either way, we keep the lexing mode the same.
-    token.DoublePlus | token.DoubleMinus -> lexer.mode
+    DoublePlus | DoubleMinus -> lexer.mode
 
     // In any other case, we look for a regular expression next.
     _ -> TreatSlashAsRegex
@@ -1054,4 +1393,442 @@ fn update_mode_with_token(lexer: Lexer, token: Token) -> Lexer {
 
 fn error(lexer: Lexer, error: Error) -> Lexer {
   Lexer(..lexer, errors: [error, ..lexer.errors])
+}
+
+/// A highlighting token, containing information about the kind of syntax
+/// being used. Many similar tokens (e.g. all keywords) are grouped together
+/// to simplify them.
+/// 
+/// For syntax tokens, see [`Token`](#Token).
+/// 
+pub type HighlightToken {
+  HighlightWhitespace(String)
+  HighlightKeyword(String)
+  HighlightVariable(String)
+  HighlightClass(String)
+  HighlightString(String)
+  HighlightRegexp(String)
+  HighlightNumber(String)
+  HighlightFunction(String)
+  HighlightOperator(String)
+  HighlightComment(String)
+  HighlightPunctuation(String)
+  HighlightOther(String)
+}
+
+/// Convert a string of JavaScript source code into ansi highlighting.
+/// 
+/// Colours taken from [`contour`](https://hexdocs.pm/contour):
+/// | Token                  | Colour      |
+/// | ---------------------- | ----------- |
+/// | Keyword                | Yellow      |
+/// | Class                  | Cyan        |
+/// | Function               | Blue        |
+/// | Operator               | Magenta     |
+/// | Comment                | Italic grey |
+/// | String, Number, Regexp | Green       |
+/// | Whitespace, Variable   | No colour   |
+///
+/// If you wish to use other colours or another format, use `to_tokens`.
+/// 
+pub fn highlight_ansi(code: String) -> String {
+  highlight_tokens(code)
+  |> list.fold("", fn(code, token) {
+    code
+    <> case token {
+      HighlightWhitespace(s) -> ansi.reset(s)
+      HighlightKeyword(s) -> ansi.yellow(s)
+      HighlightVariable(s) -> ansi.reset(s)
+      HighlightClass(s) -> ansi.cyan(s)
+      HighlightString(s) -> ansi.green(s)
+      HighlightRegexp(s) -> ansi.green(s)
+      HighlightNumber(s) -> ansi.green(s)
+      HighlightFunction(s) -> ansi.blue(s)
+      HighlightOperator(s) -> ansi.magenta(s)
+      HighlightComment(s) -> ansi.italic(ansi.gray(s))
+      HighlightPunctuation(s) -> ansi.reset(s)
+      HighlightOther(s) -> ansi.reset(s)
+    }
+  })
+}
+
+/// Convert a string of JavaScript source code into an HTML string.
+/// Each token is wrapped in a `<span>` with a class indicating the type of 
+/// 
+/// Class names taken from [`contour`](https://hexdocs.pm/contour):
+/// | Token       | CSS class      |
+/// | ----------- | -------------- |
+/// | Keyword     | hl-keyword     |
+/// | Variable    | hl-variable    |
+/// | Class       | hl-class       |
+/// | Function    | hl-function    |
+/// | Operator    | hl-operator    |
+/// | Punctuation | hl-punctuation |
+/// | Comment     | hl-comment     |
+/// | String      | hl-string      |
+/// | Regexp      | hl-regexp      |
+/// | Number      | hl-number      |
+/// | Whitespace  | no class       |
+///
+/// Place the output within a `<pre><code>...</code></pre>` and add styling for
+/// these CSS classes to get highlighting on your website. Here's some CSS you
+/// could use:
+///
+/// ```css
+/// pre code .hl-comment  { color: #d4d4d4; font-style: italic }
+/// pre code .hl-function { color: #9ce7ff }
+/// pre code .hl-keyword  { color: #ffd596 }
+/// pre code .hl-operator { color: #ffaff3 }
+/// pre code .hl-string   { color: #c8ffa7 }
+/// pre code .hl-number   { color: #c8ffa7 }
+/// pre code .hl-regexp   { color: #c8ffa7 }
+/// pre code .hl-class    { color: #ffddfa }
+/// ```
+///
+/// If you wish to use another format see `to_ansi` or `to_tokens`.
+///
+pub fn highlight_html(code: String) -> String {
+  highlight_tokens(code)
+  |> list.fold("", fn(acc, token) {
+    case token {
+      HighlightWhitespace(s) -> acc <> s
+      HighlightKeyword(s) ->
+        acc <> "<span class=hl-keyword>" <> houdini.escape(s) <> "</span>"
+      HighlightVariable(s) ->
+        acc <> "<span class=hl-variable>" <> houdini.escape(s) <> "</span>"
+      HighlightClass(s) ->
+        acc <> "<span class=hl-class>" <> houdini.escape(s) <> "</span>"
+      HighlightString(s) ->
+        acc <> "<span class=hl-string>" <> houdini.escape(s) <> "</span>"
+      HighlightRegexp(s) ->
+        acc <> "<span class=hl-regexp>" <> houdini.escape(s) <> "</span>"
+      HighlightNumber(s) ->
+        acc <> "<span class=hl-number>" <> houdini.escape(s) <> "</span>"
+      HighlightFunction(s) ->
+        acc <> "<span class=hl-function>" <> houdini.escape(s) <> "</span>"
+      HighlightOperator(s) ->
+        acc <> "<span class=hl-operator>" <> houdini.escape(s) <> "</span>"
+      HighlightComment(s) ->
+        acc <> "<span class=hl-comment>" <> houdini.escape(s) <> "</span>"
+      HighlightPunctuation(s) ->
+        acc <> "<span class=hl-punctuation>" <> houdini.escape(s) <> "</span>"
+      HighlightOther(s) -> acc <> s
+    }
+  })
+}
+
+/// Convert a string of JavaScript source code into highlighting tokens.
+/// Highlighting tokens only contain information about the kind of syntax
+/// being used, grouping similar tokens (e.g. all keywords) into one category.
+/// 
+/// To convert code into syntax tokens, see [`tokenise`](#tokenise).
+/// 
+pub fn highlight_tokens(code: String) -> List(HighlightToken) {
+  let #(tokens, _errors) = tokenise(new(code))
+  do_highlight_tokens(tokens, [])
+}
+
+fn do_highlight_tokens(
+  in: List(Token),
+  out: List(HighlightToken),
+) -> List(HighlightToken) {
+  case in {
+    [] -> list.reverse(out)
+
+    // Identifiers and specific constructs
+    [Identifier(value), LeftParen, ..in] ->
+      do_highlight_tokens(in, [
+        HighlightPunctuation("("),
+        HighlightFunction(value),
+        ..out
+      ])
+    [ContextualKeyword(keyword), LeftParen, ..in] ->
+      do_highlight_tokens(in, [
+        HighlightPunctuation("("),
+        HighlightFunction(contextual_keyword_name(keyword)),
+        ..out
+      ])
+
+    [Let, Whitespace(space), ContextualKeyword(keyword), ..in] ->
+      do_highlight_tokens(in, [
+        HighlightVariable(contextual_keyword_name(keyword)),
+        HighlightWhitespace(space),
+        HighlightKeyword("let"),
+        ..out
+      ])
+    [Const, Whitespace(space), ContextualKeyword(keyword), ..in] ->
+      do_highlight_tokens(in, [
+        HighlightVariable(contextual_keyword_name(keyword)),
+        HighlightWhitespace(space),
+        HighlightKeyword("const"),
+        ..out
+      ])
+
+    [New, Whitespace(space), Identifier(name), ..in] ->
+      do_highlight_tokens(in, [
+        HighlightClass(name),
+        HighlightWhitespace(space),
+        HighlightKeyword("new"),
+        ..out
+      ])
+    [Class, Whitespace(space), Identifier(name), ..in] ->
+      do_highlight_tokens(in, [
+        HighlightClass(name),
+        HighlightWhitespace(space),
+        HighlightKeyword("class"),
+        ..out
+      ])
+    [Extends, Whitespace(space), Identifier(name), ..in] ->
+      do_highlight_tokens(in, [
+        HighlightClass(name),
+        HighlightWhitespace(space),
+        HighlightKeyword("extends"),
+        ..out
+      ])
+    [Instanceof, Whitespace(space), Identifier(name), ..in] ->
+      do_highlight_tokens(in, [
+        HighlightClass(name),
+        HighlightWhitespace(space),
+        HighlightKeyword("instanceof"),
+        ..out
+      ])
+
+    [Identifier(name), ..in] ->
+      do_highlight_tokens(in, [HighlightVariable(name), ..out])
+    [PrivateIdentifier(name), ..in] ->
+      do_highlight_tokens(in, [HighlightVariable("#" <> name), ..out])
+
+    [ContextualKeyword(keyword), ..in] ->
+      do_highlight_tokens(in, [
+        HighlightKeyword(contextual_keyword_name(keyword)),
+        ..out
+      ])
+
+    // Comments and whitespace
+    [SingleLineComment(value), ..in] ->
+      do_highlight_tokens(in, [HighlightComment("//" <> value), ..out])
+    [MultiLineComment(value), ..in] ->
+      do_highlight_tokens(in, [HighlightComment("/*" <> value <> "*/"), ..out])
+    [HashBangComment(value), ..in] ->
+      do_highlight_tokens(in, [HighlightComment("#!" <> value), ..out])
+    [Whitespace(value), ..in] ->
+      do_highlight_tokens(in, [HighlightWhitespace(value), ..out])
+    [LineTerminator(value), ..in] ->
+      do_highlight_tokens(in, [HighlightWhitespace(value), ..out])
+    [EndOfFile, ..in] -> do_highlight_tokens(in, out)
+
+    // Literals
+    [Number(value), ..in] ->
+      do_highlight_tokens(in, [HighlightNumber(value), ..out])
+    [BigInt(value), ..in] ->
+      do_highlight_tokens(in, [HighlightNumber(value <> "n"), ..out])
+    [String(quote:, contents:), ..in] ->
+      do_highlight_tokens(in, [
+        HighlightString(quote <> contents <> quote),
+        ..out
+      ])
+    [RegularExpression(contents:, flags:), ..in] ->
+      do_highlight_tokens(in, [
+        HighlightRegexp("/" <> contents <> "/" <> flags),
+        ..out
+      ])
+    [TemplateHead(value), ..in] ->
+      do_highlight_tokens(in, [HighlightString("`" <> value <> "${"), ..out])
+    [TemplateMiddle(value), ..in] ->
+      do_highlight_tokens(in, [HighlightString("}" <> value <> "${"), ..out])
+    [TemplateTail(value), ..in] ->
+      do_highlight_tokens(in, [HighlightString("}" <> value <> "`"), ..out])
+
+    // Keywords
+    [Break, ..in] -> do_highlight_tokens(in, [HighlightKeyword("break"), ..out])
+    [Case, ..in] -> do_highlight_tokens(in, [HighlightKeyword("case"), ..out])
+    [Catch, ..in] -> do_highlight_tokens(in, [HighlightKeyword("catch"), ..out])
+    [Class, ..in] -> do_highlight_tokens(in, [HighlightKeyword("class"), ..out])
+    [Const, ..in] -> do_highlight_tokens(in, [HighlightKeyword("const"), ..out])
+    [Continue, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("continue"), ..out])
+    [Debugger, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("debugger"), ..out])
+    [Default, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("default"), ..out])
+    [Delete, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("delete"), ..out])
+    [Do, ..in] -> do_highlight_tokens(in, [HighlightKeyword("do"), ..out])
+    [Else, ..in] -> do_highlight_tokens(in, [HighlightKeyword("else"), ..out])
+    [Export, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("export"), ..out])
+    [Extends, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("extends"), ..out])
+    [False, ..in] -> do_highlight_tokens(in, [HighlightKeyword("false"), ..out])
+    [Finally, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("finally"), ..out])
+    [For, ..in] -> do_highlight_tokens(in, [HighlightKeyword("for"), ..out])
+    [Function, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("function"), ..out])
+    [If, ..in] -> do_highlight_tokens(in, [HighlightKeyword("if"), ..out])
+    [Import, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("import"), ..out])
+    [In, ..in] -> do_highlight_tokens(in, [HighlightKeyword("in"), ..out])
+    [Instanceof, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("instanceof"), ..out])
+    [New, ..in] -> do_highlight_tokens(in, [HighlightKeyword("new"), ..out])
+    [Null, ..in] -> do_highlight_tokens(in, [HighlightKeyword("null"), ..out])
+    [Return, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("return"), ..out])
+    [Super, ..in] -> do_highlight_tokens(in, [HighlightKeyword("super"), ..out])
+    [Switch, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("switch"), ..out])
+    [This, ..in] -> do_highlight_tokens(in, [HighlightKeyword("this"), ..out])
+    [Throw, ..in] -> do_highlight_tokens(in, [HighlightKeyword("throw"), ..out])
+    [True, ..in] -> do_highlight_tokens(in, [HighlightKeyword("true"), ..out])
+    [Try, ..in] -> do_highlight_tokens(in, [HighlightKeyword("try"), ..out])
+    [Typeof, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("typeof"), ..out])
+    [Var, ..in] -> do_highlight_tokens(in, [HighlightKeyword("var"), ..out])
+    [Void, ..in] -> do_highlight_tokens(in, [HighlightKeyword("void"), ..out])
+    [While, ..in] -> do_highlight_tokens(in, [HighlightKeyword("while"), ..out])
+    [With, ..in] -> do_highlight_tokens(in, [HighlightKeyword("with"), ..out])
+
+    // Keywords in strict mode
+    [Let, ..in] -> do_highlight_tokens(in, [HighlightKeyword("let"), ..out])
+    [Static, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("static"), ..out])
+    [Yield, ..in] -> do_highlight_tokens(in, [HighlightKeyword("yield"), ..out])
+
+    // Future reserved words
+    [Enum, ..in] -> do_highlight_tokens(in, [HighlightKeyword("enum"), ..out])
+
+    // Future reserved words in strict mode
+    [Implements, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("implements"), ..out])
+    [Interface, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("interface"), ..out])
+    [Package, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("package"), ..out])
+    [Private, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("private"), ..out])
+    [Protected, ..in] ->
+      do_highlight_tokens(in, [HighlightKeyword("protected"), ..out])
+
+    // Grouping
+    [LeftBrace, ..in] ->
+      do_highlight_tokens(in, [HighlightPunctuation("{"), ..out])
+    [RightBrace, ..in] ->
+      do_highlight_tokens(in, [HighlightPunctuation("}"), ..out])
+    [LeftParen, ..in] ->
+      do_highlight_tokens(in, [HighlightPunctuation("("), ..out])
+    [RightParen, ..in] ->
+      do_highlight_tokens(in, [HighlightPunctuation(")"), ..out])
+    [LeftSquare, ..in] ->
+      do_highlight_tokens(in, [HighlightPunctuation("["), ..out])
+    [RightSquare, ..in] ->
+      do_highlight_tokens(in, [HighlightPunctuation("]"), ..out])
+
+    // Separators
+    [Dot, ..in] -> do_highlight_tokens(in, [HighlightPunctuation("."), ..out])
+    [TripleDot, ..in] ->
+      do_highlight_tokens(in, [HighlightPunctuation("..."), ..out])
+    [Semicolon, ..in] ->
+      do_highlight_tokens(in, [HighlightPunctuation(";"), ..out])
+    [Comma, ..in] -> do_highlight_tokens(in, [HighlightPunctuation(","), ..out])
+    [Colon, ..in] -> do_highlight_tokens(in, [HighlightPunctuation(":"), ..out])
+    [Arrow, ..in] ->
+      do_highlight_tokens(in, [HighlightPunctuation("=>"), ..out])
+
+    // Comparison
+    [Less, ..in] -> do_highlight_tokens(in, [HighlightOperator("<"), ..out])
+    [Greater, ..in] -> do_highlight_tokens(in, [HighlightOperator(">"), ..out])
+    [LessEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("<="), ..out])
+    [GreaterEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator(">="), ..out])
+    [DoubleEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("=="), ..out])
+    [BangEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("!="), ..out])
+    [TripleEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("==="), ..out])
+    [BangDoubleEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("!=="), ..out])
+
+    // Arithmetic
+    [Plus, ..in] -> do_highlight_tokens(in, [HighlightOperator("+"), ..out])
+    [Minus, ..in] -> do_highlight_tokens(in, [HighlightOperator("-"), ..out])
+    [Star, ..in] -> do_highlight_tokens(in, [HighlightOperator("*"), ..out])
+    [Slash, ..in] -> do_highlight_tokens(in, [HighlightOperator("/"), ..out])
+    [Percent, ..in] -> do_highlight_tokens(in, [HighlightOperator("%"), ..out])
+    [DoubleStar, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("**"), ..out])
+    [DoublePlus, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("++"), ..out])
+    [DoubleMinus, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("--"), ..out])
+    [DoubleLess, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("<<"), ..out])
+    [DoubleGreater, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator(">>"), ..out])
+    [TripleGreater, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator(">>>"), ..out])
+    [Ampersand, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("&"), ..out])
+    [Pipe, ..in] -> do_highlight_tokens(in, [HighlightOperator("|"), ..out])
+    [Caret, ..in] -> do_highlight_tokens(in, [HighlightOperator("^"), ..out])
+    [Tilde, ..in] -> do_highlight_tokens(in, [HighlightOperator("~"), ..out])
+
+    // Logic
+    [Bang, ..in] -> do_highlight_tokens(in, [HighlightOperator("!"), ..out])
+    [DoubleAmpersand, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("&&"), ..out])
+    [DoublePipe, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("||"), ..out])
+    [Question, ..in] -> do_highlight_tokens(in, [HighlightOperator("?"), ..out])
+    [DoubleQuestion, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("??"), ..out])
+    [QuestionDot, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("?."), ..out])
+
+    // Assignment
+    [Equal, ..in] -> do_highlight_tokens(in, [HighlightOperator("="), ..out])
+    [PlusEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("+="), ..out])
+    [MinusEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("-="), ..out])
+    [StarEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("*="), ..out])
+    [SlashEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("/="), ..out])
+    [PercentEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("%="), ..out])
+    [DoubleStarEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("**="), ..out])
+    [DoubleLessEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("<<="), ..out])
+    [DoubleGreaterEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator(">>="), ..out])
+    [TripleGreaterEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator(">>>="), ..out])
+    [AmpersandEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("&="), ..out])
+    [PipeEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("|="), ..out])
+    [CaratEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("^="), ..out])
+    [DoubleAmpersandEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("&&="), ..out])
+    [DoublePipeEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("||="), ..out])
+    [DoubleQuestionEqual, ..in] ->
+      do_highlight_tokens(in, [HighlightOperator("??="), ..out])
+
+    [Unknown(value), ..in] ->
+      do_highlight_tokens(in, [HighlightOther(value), ..out])
+    [UnterminatedComment(value), ..in] ->
+      do_highlight_tokens(in, [HighlightComment("/*" <> value), ..out])
+    [UnterminatedRegularExpression(value), ..in] ->
+      do_highlight_tokens(in, [HighlightRegexp("/" <> value), ..out])
+    [UnterminatedString(quote:, contents:), ..in] ->
+      do_highlight_tokens(in, [HighlightString(quote <> contents), ..out])
+    [UnterminatedTemplate(contents), ..in] ->
+      do_highlight_tokens(in, [HighlightString(contents), ..out])
+  }
 }

@@ -1,7 +1,7 @@
+import birdie
 import gleam/list
 import gleeunit
 import just
-import just/token
 import simplifile
 
 pub fn main() -> Nil {
@@ -21,17 +21,17 @@ fn assert_roundtrip(src: String, allow_errors: Bool) -> Nil {
   assert just.to_source(tokens) == src
 }
 
-fn assert_tokens(src: String, tokens: List(token.Token)) -> Nil {
+fn assert_tokens(src: String, tokens: List(just.Token)) -> Nil {
   do_assert_tokens(src, tokens, False)
 }
 
-fn assert_tokens_in_strict_mode(src: String, tokens: List(token.Token)) -> Nil {
+fn assert_tokens_in_strict_mode(src: String, tokens: List(just.Token)) -> Nil {
   do_assert_tokens(src, tokens, True)
 }
 
 fn do_assert_tokens(
   src: String,
-  tokens: List(token.Token),
+  tokens: List(just.Token),
   strict_mode: Bool,
 ) -> Nil {
   let lexer = case strict_mode {
@@ -40,7 +40,7 @@ fn do_assert_tokens(
   }
   let #(lexed, errors) = lexer |> just.ignore_whitespace |> just.tokenise
   assert errors == []
-  let tokens = list.append(tokens, [token.EndOfFile])
+  let tokens = list.append(tokens, [just.EndOfFile])
   assert lexed == tokens
 }
 
@@ -103,22 +103,22 @@ This comment spans the rest of the program.
 pub fn regex_token_test() {
   let src = "r = /some regex[/\\]\\\\]\\//abcflags;"
   assert_tokens(src, [
-    token.Identifier("r"),
-    token.Equal,
-    token.RegularExpression("some regex[/\\]\\\\]\\/", "abcflags"),
-    token.Semicolon,
+    just.Identifier("r"),
+    just.Equal,
+    just.RegularExpression("some regex[/\\]\\\\]\\/", "abcflags"),
+    just.Semicolon,
   ])
 }
 
 pub fn division_token_test() {
   let src = "x = a / b;"
   assert_tokens(src, [
-    token.Identifier("x"),
-    token.Equal,
-    token.Identifier("a"),
-    token.Slash,
-    token.Identifier("b"),
-    token.Semicolon,
+    just.Identifier("x"),
+    just.Equal,
+    just.Identifier("a"),
+    just.Slash,
+    just.Identifier("b"),
+    just.Semicolon,
   ])
 }
 
@@ -127,48 +127,48 @@ pub fn ambiguous_slash_token_test() {
     "a = b
 /hi/g.exec(c).map(d);"
   assert_tokens(src, [
-    token.Identifier("a"),
-    token.Equal,
-    token.Identifier("b"),
-    token.Slash,
-    token.Identifier("hi"),
-    token.Slash,
-    token.Identifier("g"),
-    token.Dot,
-    token.Identifier("exec"),
-    token.LeftParen,
-    token.Identifier("c"),
-    token.RightParen,
-    token.Dot,
-    token.Identifier("map"),
-    token.LeftParen,
-    token.Identifier("d"),
-    token.RightParen,
-    token.Semicolon,
+    just.Identifier("a"),
+    just.Equal,
+    just.Identifier("b"),
+    just.Slash,
+    just.Identifier("hi"),
+    just.Slash,
+    just.Identifier("g"),
+    just.Dot,
+    just.Identifier("exec"),
+    just.LeftParen,
+    just.Identifier("c"),
+    just.RightParen,
+    just.Dot,
+    just.Identifier("map"),
+    just.LeftParen,
+    just.Identifier("d"),
+    just.RightParen,
+    just.Semicolon,
   ])
 }
 
 pub fn many_plus_test() {
   let src = "a+++++ ++ 1"
   assert_tokens(src, [
-    token.Identifier("a"),
-    token.DoublePlus,
-    token.DoublePlus,
-    token.Plus,
-    token.DoublePlus,
-    token.Number("1"),
+    just.Identifier("a"),
+    just.DoublePlus,
+    just.DoublePlus,
+    just.Plus,
+    just.DoublePlus,
+    just.Number("1"),
   ])
 }
 
 pub fn long_token_test() {
   let src = ">>>= ??= ?. <<= &&= &="
   assert_tokens(src, [
-    token.TripleGreaterEqual,
-    token.DoubleQuestionEqual,
-    token.QuestionDot,
-    token.DoubleLessEqual,
-    token.DoubleAmpersandEqual,
-    token.AmpersandEqual,
+    just.TripleGreaterEqual,
+    just.DoubleQuestionEqual,
+    just.QuestionDot,
+    just.DoubleLessEqual,
+    just.DoubleAmpersandEqual,
+    just.AmpersandEqual,
   ])
 }
 
@@ -176,20 +176,20 @@ pub fn numbers_test() {
   let src =
     "0n 1234n 2.3E10 5.4e-3 1e8 0xABCDEF 0Xabcdef123 0o1234 0O5670 0b101101 0B0010 0xabcdn 0123 0988"
   assert_tokens(src, [
-    token.BigInt("0"),
-    token.BigInt("1234"),
-    token.Number("2.3E10"),
-    token.Number("5.4e-3"),
-    token.Number("1e8"),
-    token.Number("0xABCDEF"),
-    token.Number("0Xabcdef123"),
-    token.Number("0o1234"),
-    token.Number("0O5670"),
-    token.Number("0b101101"),
-    token.Number("0B0010"),
-    token.BigInt("0xabcd"),
-    token.Number("0123"),
-    token.Number("0988"),
+    just.BigInt("0"),
+    just.BigInt("1234"),
+    just.Number("2.3E10"),
+    just.Number("5.4e-3"),
+    just.Number("1e8"),
+    just.Number("0xABCDEF"),
+    just.Number("0Xabcdef123"),
+    just.Number("0o1234"),
+    just.Number("0O5670"),
+    just.Number("0b101101"),
+    just.Number("0B0010"),
+    just.BigInt("0xabcd"),
+    just.Number("0123"),
+    just.Number("0988"),
   ])
 }
 
@@ -199,31 +199,31 @@ pub fn template_test() {
 Even an object: ${{value: 1, wibble: {wobble: 10}}}. That's enough interpolation for me \\
 but let\\`s try some \\escaping`"
   assert_tokens(src, [
-    token.TemplateHead("Hello! have some "),
-    token.Number("1"),
-    token.Slash,
-    token.Number("2"),
-    token.Star,
-    token.Number("3"),
-    token.TemplateMiddle(" "),
-    token.String("'", "interpola"),
-    token.Plus,
-    token.String("'", "tion"),
-    token.TemplateMiddle(".\nEven an object: "),
-    token.LeftBrace,
-    token.Identifier("value"),
-    token.Colon,
-    token.Number("1"),
-    token.Comma,
-    token.Identifier("wibble"),
-    token.Colon,
-    token.LeftBrace,
-    token.Identifier("wobble"),
-    token.Colon,
-    token.Number("10"),
-    token.RightBrace,
-    token.RightBrace,
-    token.TemplateTail(
+    just.TemplateHead("Hello! have some "),
+    just.Number("1"),
+    just.Slash,
+    just.Number("2"),
+    just.Star,
+    just.Number("3"),
+    just.TemplateMiddle(" "),
+    just.String("'", "interpola"),
+    just.Plus,
+    just.String("'", "tion"),
+    just.TemplateMiddle(".\nEven an object: "),
+    just.LeftBrace,
+    just.Identifier("value"),
+    just.Colon,
+    just.Number("1"),
+    just.Comma,
+    just.Identifier("wibble"),
+    just.Colon,
+    just.LeftBrace,
+    just.Identifier("wobble"),
+    just.Colon,
+    just.Number("10"),
+    just.RightBrace,
+    just.RightBrace,
+    just.TemplateTail(
       ". That's enough interpolation for me \\\nbut let\\`s try some \\escaping",
     ),
   ])
@@ -236,26 +236,26 @@ pub fn unknown_character_test() {
 
 pub fn unterminated_string_eof_test() {
   let src = "\"Some string that doesn't end"
-  assert_errors(src, [just.UnterminatedString])
+  assert_errors(src, [just.UnterminatedStringLiteral])
 }
 
 pub fn unterminated_string_newline_test() {
   let src =
     "\"Some string that tries
 to continue on the next line"
-  assert_errors(src, [just.UnterminatedString])
+  assert_errors(src, [just.UnterminatedStringLiteral])
 }
 
 pub fn unterminated_regular_expression_eof_test() {
   let src = "/some[regex]"
-  assert_errors(src, [just.UnterminatedRegularExpression])
+  assert_errors(src, [just.UnterminatedRegExpLiteral])
 }
 
 pub fn unterminated_regular_expression_newline_test() {
   let src =
     "/regexes[dont]like
 newlines"
-  assert_errors(src, [just.UnterminatedRegularExpression])
+  assert_errors(src, [just.UnterminatedRegExpLiteral])
 }
 
 pub fn unterminated_comment_test() {
@@ -264,14 +264,14 @@ pub fn unterminated_comment_test() {
 spans the entire
 file
 and doesn't stop"
-  assert_errors(src, [just.UnterminatedComment])
+  assert_errors(src, [just.UnterminatedMultilineComment])
 }
 
 pub fn unterminated_template_test() {
   let src =
     "`The template
 that never terminates"
-  assert_errors(src, [just.UnterminatedString])
+  assert_errors(src, [just.UnterminatedStringLiteral])
 }
 
 pub fn unterminated_template_with_expressions_test() {
@@ -279,7 +279,7 @@ pub fn unterminated_template_with_expressions_test() {
     "`The template which has ${4 / 2}
 interpolations
 that ${(+\"a\"+[])[0] + \"ever\"} terminates"
-  assert_errors(src, [just.UnterminatedTemplate])
+  assert_errors(src, [just.UnterminatedTemplateLiteral])
 }
 
 pub fn letter_after_number_test() {
@@ -379,5 +379,114 @@ pub fn zero_prefixed_decimal_number_in_strict_mode_test() {
 
 pub fn plain_zero_in_strict_mode_test() {
   let src = "0"
-  assert_tokens_in_strict_mode(src, [token.Number("0")])
+  assert_tokens_in_strict_mode(src, [just.Number("0")])
+}
+
+fn assert_ansi_highlight(title: String, src: String) -> Nil {
+  birdie.snap(
+    src <> "\n\n---\n\n" <> just.highlight_ansi(src),
+    "highlight_" <> title <> "_ansi",
+  )
+}
+
+fn assert_html_highlight(title: String, src: String) -> Nil {
+  birdie.snap(
+    src <> "\n\n---\n\n" <> just.highlight_html(src),
+    "highlight_" <> title <> "_html",
+  )
+}
+
+pub fn basic_program_test() {
+  assert_ansi_highlight(
+    "basic_program",
+    "
+export function main() {
+  const message = 'Hello, world!';
+  console.log(message);
+}
+
+main();
+",
+  )
+}
+
+pub fn basic_program_html_test() {
+  assert_html_highlight(
+    "basic_program",
+    "
+export function main() {
+  const message = 'Hello, world!';
+  console.log(message);
+}
+
+main();
+",
+  )
+}
+
+pub fn arithmetic_test() {
+  assert_ansi_highlight(
+    "arithmetic",
+    "
+let x = 1 + 2 / 3.5e10;
+let y = 0n * 0xff8n ** x;
+x <= y === false;
+",
+  )
+}
+
+pub fn arithmetic_html_test() {
+  assert_html_highlight(
+    "arithmetic",
+    "
+let x = 1 + 2 / 3.5e10;
+let y = 0n * 0xff8n ** x;
+x <= y === false;
+",
+  )
+}
+
+pub fn comments_test() {
+  assert_ansi_highlight(
+    "comments",
+    "#! shebang!
+// This is some kind of comment
+console.log(\"Hi\");
+/*
+Another comment
+that spans several lines
+*/
+let x = /* this on is inline! */ 10;
+",
+  )
+}
+
+pub fn class_test() {
+  assert_ansi_highlight(
+    "class",
+    "
+class RegexWrapper {
+  constructor(r) {
+    this.r = r;
+  }
+}
+
+const rw = new RegexWrapper(/hello [regex]?/);
+console.log(rw instanceof RegexWrapper);
+",
+  )
+}
+
+pub fn errors_test() {
+  assert_ansi_highlight(
+    "errors",
+    "
+let unknown = @;
+let ustring = 'This string does not finish
+let uregex = /uh oh
+let badNumber = 0xabcdefg;
+/*
+This comment spans the rest of the program.
+",
+  )
 }
