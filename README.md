@@ -6,7 +6,7 @@ A JavaScript lexer and syntax highlighter for Gleam!
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/just/)
 
 Just is a JavaScript lexer and syntax highlighter written in Gleam. The lexer is
-based on [`glexer`](https://hexdocs.mp/glexer), allowing you to convert JavaScript
+based on [`glexer`](https://hexdocs.pm/glexer), allowing you to convert JavaScript
 source code into tokens. There is also an API which allows you to highlight
 JavaScript code using ansi colours, html or a custom format. Heavily inspired
 by [`contour`](https://hexdocs.pm/contour).
