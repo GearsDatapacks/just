@@ -1068,20 +1068,15 @@ fn ensure_no_letters_after_numbers(lexer: Lexer) -> Lexer {
 }
 
 fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, Token) {
-  let #(before, split, after) =
-    splitter.split(lexer.splitters.string, lexer.source)
-  case split {
-    "" -> #(
+  let #(before, after) =
+    splitter.split_before(lexer.splitters.string, lexer.source)
+  case after {
+    "\r" <> _rest | "\n" <> _rest -> #(
       error(advance(lexer, after), UnterminatedStringLiteral),
       UnterminatedString(quote:, contents: contents <> before),
     )
 
-    "\r" | "\n" -> #(
-      error(advance(lexer, split <> after), UnterminatedStringLiteral),
-      UnterminatedString(quote:, contents: contents <> before),
-    )
-
-    "\\" ->
+    "\\" <> after ->
       case string.pop_grapheme(after) {
         Error(_) -> #(
           error(advance(lexer, after), UnterminatedStringLiteral),
@@ -1095,7 +1090,7 @@ fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, Token) 
           )
       }
 
-    _ if split == quote -> #(
+    "\"" as split <> after | "'" as split <> after if split == quote -> #(
       advance(lexer, after),
       String(quote:, contents: contents <> before),
     )
@@ -1103,7 +1098,13 @@ fn lex_string(lexer: Lexer, quote: String, contents: String) -> #(Lexer, Token) 
     // Here, we've split on a quote which doesn't match the current string.
     // In this case, we must continue lexing until we find a quote of the
     // correct kind.
-    _ -> lex_string(advance(lexer, after), quote, contents <> before <> split)
+    "\"" as split <> after | "'" as split <> after ->
+      lex_string(advance(lexer, after), quote, contents <> before <> split)
+
+    _ -> #(
+      error(advance(lexer, after), UnterminatedStringLiteral),
+      UnterminatedString(quote:, contents: contents <> before),
+    )
   }
 }
 
@@ -1211,17 +1212,19 @@ fn lex_regex(lexer: Lexer, lexed: String, in_group: Bool) -> #(Lexer, Token) {
     gleam.False -> lexer.splitters.regex_regular
     gleam.True -> lexer.splitters.regex_in_group
   }
-  let #(before, split, after) = splitter.split(splitter, lexer.source)
-  case split {
-    "/" -> {
+  let #(before, after) = splitter.split_before(splitter, lexer.source)
+  case after {
+    "/" <> after -> {
       let lexer = advance(lexer, after)
       let #(lexer, flags) = lex_identifier(lexer, "")
       #(lexer, RegularExpression(contents: lexed <> before, flags:))
     }
-    "[" -> lex_regex(advance(lexer, after), lexed <> before <> "[", gleam.True)
-    "]" -> lex_regex(advance(lexer, after), lexed <> before <> "]", gleam.False)
+    "[" <> after ->
+      lex_regex(advance(lexer, after), lexed <> before <> "[", gleam.True)
+    "]" <> after ->
+      lex_regex(advance(lexer, after), lexed <> before <> "]", gleam.False)
 
-    "\\" ->
+    "\\" <> after ->
       case string.pop_grapheme(after) {
         Error(_) -> #(
           error(advance(lexer, after), UnterminatedRegExpLiteral),
@@ -1236,7 +1239,7 @@ fn lex_regex(lexer: Lexer, lexed: String, in_group: Bool) -> #(Lexer, Token) {
       }
 
     _ -> #(
-      error(advance(lexer, split <> after), UnterminatedRegExpLiteral),
+      error(advance(lexer, after), UnterminatedRegExpLiteral),
       UnterminatedRegularExpression(lexed <> before),
     )
   }
@@ -1347,9 +1350,9 @@ fn whitespace(lexer: Lexer, lexed: String) -> #(Lexer, Token) {
 }
 
 fn lex_until_end_of_line(lexer: Lexer) -> #(Lexer, String) {
-  let #(before, split, after) =
-    splitter.split(lexer.splitters.until_end_of_line, lexer.source)
-  #(advance(lexer, split <> after), before)
+  let #(before, after) =
+    splitter.split_before(lexer.splitters.until_end_of_line, lexer.source)
+  #(advance(lexer, after), before)
 }
 
 fn advance(lexer: Lexer, source: String) -> Lexer {
